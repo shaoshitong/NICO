@@ -21,7 +21,7 @@ class ShakeDrop(Function):
     @staticmethod
     def forward(ctx, x, identity, p) -> torch.Tensor:
         ctx.p = p
-        uniform = random.uniform(-1, 1)
+        uniform = torch.rand(x.shape[0]).cuda().view(x.shape[0],1,1,1)*2-1
         p = torch.bernoulli(torch.Tensor([p])).cuda()
         x = x * (p + uniform - p * uniform) + identity
         return x
@@ -29,9 +29,8 @@ class ShakeDrop(Function):
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor):
         p = ctx.p
-        uniform = random.uniform(0, 1)
+        uniform = torch.rand(grad_output.shape[0]).cuda().view(grad_output.shape[0],1,1,1)
         p = torch.bernoulli(torch.Tensor([p])).cuda()
-
         return grad_output * (p + uniform - p * uniform), grad_output, None
 
 
@@ -251,7 +250,7 @@ class PyramidNet(nn.Module):
             for c in channel:
                 total_number += 1
         now_number = 1
-        func_number = lambda x: 1 - x / total_number
+        func_number = lambda x: 1 - 0.5 * x / total_number
         for i, channels_per_stage in enumerate(channels):
             stage = nn.Sequential()
             for j, out_channels in enumerate(channels_per_stage):
@@ -342,6 +341,8 @@ def get_pyramidnet(blocks,
         layers = [3, 8, 36, 3]
     elif blocks == 200:
         layers = [3, 24, 36, 3]
+    elif blocks == 272:
+        layers = [3, 36, 48, 3]
     else:
         raise ValueError("Unsupported ResNet with number of blocks: {}".format(blocks))
 

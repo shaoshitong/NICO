@@ -52,7 +52,7 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
     torch.backends.cudnn.fastest=True
     net.network = torch.nn.parallel.DistributedDataParallel(net.network, device_ids=[gpu])
     args.batch_size = int(args.batch_size / ngpus_per_node)
-    train_dataloader,test_dataloader = helper.get_our_dataloader(args,'/home/sst/dataset/nico/nico/train' ,'train')
+    train_dataloader,test_dataloader = helper.get_our_dataloader(args,'/home/Bigdata/NICO/nico/train' ,'train')
     print("begin training......")
     if args.resume==True:
         dict=torch.load("./run2.pth")
@@ -67,7 +67,7 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
         tnet=model.PyramidNet(args.num_classes,args,blocks=200,alpha=360)
         tnet.cuda(gpu)
         tnet.network=torch.nn.parallel.DistributedDataParallel(tnet.network,device_ids=[gpu])
-        model_ckpt=torch.load("./results/kd_best4.pth")['model']
+        model_ckpt=torch.load("./results/kd_best5.pth")['model']
         tnet.network.module.load_state_dict(model_ckpt)
         tnet.requires_grad=False
         for step in range(epoch,args.num_steps):
@@ -109,7 +109,7 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                     best_acc = accuracy
                     dict = {'epoch': step, 'model': net.network.module.state_dict(),
                             'optimizer': net.optimizer.state_dict()}
-                    torch.save(dict, "results/kd_best5.pth")
+                    torch.save(dict, "results/kd_best6.pth")
                 print("ite: %d, test accuracy: %.4f" % (step + 1, accuracy))
 
     else:
@@ -136,7 +136,7 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                 if accuracy>best_acc:
                     best_acc=accuracy
                     dict={'epoch':step,'model':net.network.module.state_dict(),'optimizer':net.optimizer.state_dict()}
-                    torch.save(dict, "results/kd_best5.pth")
+                    torch.save(dict, "results/kd_best6.pth")
                 print("ite: %d, test accuracy: %.4f" % (step+1, accuracy))
 
 
