@@ -244,11 +244,8 @@ class Translate(object):
         x=self.first_img_tr(x)
         x=self.second_img_tr(x)
         x=self.third_img_tr(x)
-        high_image_ratio=0
-        high_image_total=0
-        for policy in self.second_img_tr.policies:
-            high_image_ratio+=policy.jiru
-            high_image_total+=2
+        high_image_total=2
+        high_image_ratio=self.second_img_tr.policies[self.second_img_tr.policy_idx].jiru
         return x,high_image_ratio/high_image_total
 
 

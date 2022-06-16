@@ -182,6 +182,7 @@ class CIFAR10Policy(object):
 
     def __call__(self, img):
         policy_idx = random.randint(0, len(self.policies) - 1)
+        self.policy_idx=policy_idx
         return self.policies[policy_idx](img)
 
     def __repr__(self):
