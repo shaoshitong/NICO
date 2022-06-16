@@ -46,13 +46,13 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
     rank = rank * ngpus_per_node + gpu
     dist.init_process_group(backend='nccl', init_method=dist_url,
                         world_size=world_size, rank=rank)
-    net = model.PyramidNet(num_classes=60,args=args,shakedrop=True)
+    net = model.PyramidNet(num_classes=60,args=args,shakedrop=False)
     net.cuda(gpu)
     torch.backends.cudnn.benchmark=True
     torch.backends.cudnn.fastest=True
     net.network = torch.nn.parallel.DistributedDataParallel(net.network, device_ids=[gpu])
     args.batch_size = int(args.batch_size / ngpus_per_node)
-    train_dataloader,test_dataloader = helper.get_our_dataloader(args,'/home/Bigdata/NICO/nico/train' ,'train')
+    train_dataloader,test_dataloader = helper.get_our_dataloader(args,'/home/sst/dataset/nico/nico/train' ,'train')
     print("begin training......")
     if args.resume==True:
         dict=torch.load("./run2.pth")
@@ -64,16 +64,17 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
     best_acc=0.
     if args.KD==True:
         kd_loss=KDLoss(temperature=4)
-        tnet=model.PyramidNet(args.num_classes,args,blocks=200,alpha=360)
+        tnet=model.PyramidNet(args.num_classes,args,blocks=272,alpha=200)
         tnet.cuda(gpu)
         tnet.network=torch.nn.parallel.DistributedDataParallel(tnet.network,device_ids=[gpu])
-        model_ckpt=torch.load("./results/kd_best5.pth")['model']
+        model_ckpt=torch.load("./results/kd_best6.pth")['model']
         tnet.network.module.load_state_dict(model_ckpt)
         tnet.requires_grad=False
         for step in range(epoch,args.num_steps):
             eps=(step+1)/args.num_steps
             train_dataloader.dataset.eps=eps
-            test_dataloader.dataset.eps=eps
+            if test_dataloader !=None:
+                test_dataloader.dataset.eps=eps
             if gpu==0:
                 print(f"lr:{net.optimizer.param_groups[0]['lr']}")
             for i,(x,y,domain,real_domain) in enumerate(train_dataloader):
@@ -104,14 +105,19 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                     torch.save(dict, "run2.pth")
             net.scheduler.step(step)
             if (step + 1) % 1 == 0 and gpu == 0:
-                accuracy = helper.test(net, test_dataloader, gpu)
-                if accuracy > best_acc:
-                    best_acc = accuracy
-                    dict = {'epoch': step, 'model': net.network.module.state_dict(),
-                            'optimizer': net.optimizer.state_dict()}
-                    torch.save(dict, "results/kd_best6.pth")
-                print("ite: %d, test accuracy: %.4f" % (step + 1, accuracy))
-
+                if test_dataloader!=None:
+                    accuracy = helper.test(net, test_dataloader, gpu)
+                    if accuracy > best_acc:
+                        best_acc = accuracy
+                        dict = {'epoch': step, 'model': net.network.module.state_dict(),
+                                'optimizer': net.optimizer.state_dict()}
+                        torch.save(dict, "results/kd_best7.pth")
+                    print("ite: %d, test accuracy: %.4f" % (step + 1, accuracy))
+                else:
+                    if args.num_steps-(step+1)<5:
+                        dict = {'epoch': step, 'model': net.network.module.state_dict(),
+                                'optimizer': net.optimizer.state_dict()}
+                        torch.save(dict, f"results/kd_best_{args.num_steps-(step+1)}.pth")
     else:
         for step in range(epoch,args.num_steps):
             if gpu==0:
@@ -132,12 +138,18 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                     torch.save(dict, "run2.pth")
             net.scheduler.step(step)
             if (step+1) % 1 == 0 and gpu==0:
-                accuracy = helper.test(net, test_dataloader, gpu)
-                if accuracy>best_acc:
-                    best_acc=accuracy
-                    dict={'epoch':step,'model':net.network.module.state_dict(),'optimizer':net.optimizer.state_dict()}
-                    torch.save(dict, "results/kd_best6.pth")
-                print("ite: %d, test accuracy: %.4f" % (step+1, accuracy))
+                if test_dataloader!=None:
+                    accuracy = helper.test(net, test_dataloader, gpu)
+                    if accuracy>best_acc:
+                        best_acc=accuracy
+                        dict={'epoch':step,'model':net.network.module.state_dict(),'optimizer':net.optimizer.state_dict()}
+                        torch.save(dict, "results/kd_best7.pth")
+                    print("ite: %d, test accuracy: %.4f" % (step+1, accuracy))
+                else:
+                    if args.num_steps-(step+1)<5:
+                        dict = {'epoch': step, 'model': net.network.module.state_dict(),
+                                'optimizer': net.optimizer.state_dict()}
+                        torch.save(dict, f"results/kd_best_{args.num_steps-(step+1)}.pth")
 
 
 if __name__=="__main__":

@@ -36,6 +36,7 @@ class Args():
         self.lr = 0.09
         self.resume=False
         self.weight_decay = 1e-4
+        self.fewer_ratio=0.999
         self.momentum = 0.9
         self.optimizer = "sgd"
         self.min_scale = 0.8
@@ -287,18 +288,22 @@ def get_ERM_dataloader(args, phase,num_worker=8):
 def get_our_dataloader(args,path,phase,num_worker=8):
     assert phase in ["train", "test"]
     from utils.generate_txt_label import generate_test,generate_train
+    few_ratio = args.fewer_ratio
     if phase=='train':
         results=generate_train(path)
         img_tr=get_train_transformer(args)
         img_vr=get_val_transformer(args)
         dataset=DGDataset(results,img_tr,img_vr)
         labels = [int(dataset.result[i][1]) for i in range(len(dataset.result))]
-        few_ratio=0.9
-        ss = StratifiedShuffleSplit(n_splits=1, test_size=1 - few_ratio, random_state=0)
-        train_indices, valid_indices = list(ss.split(np.array(labels)[:, np.newaxis], labels))[0]
-        trainset = torch.utils.data.Subset(dataset, train_indices)
-        testset = torch.utils.data.Subset(dataset, valid_indices)
-        sampler=torch.utils.data.distributed.DistributedSampler(trainset)
+        if few_ratio>0.95:
+            trainset=dataset
+            sampler = torch.utils.data.distributed.DistributedSampler(trainset)
+        else:
+            ss = StratifiedShuffleSplit(n_splits=1, test_size=1 - few_ratio, random_state=0)
+            train_indices, valid_indices = list(ss.split(np.array(labels)[:, np.newaxis], labels))[0]
+            trainset = torch.utils.data.Subset(dataset, train_indices)
+            testset = torch.utils.data.Subset(dataset, valid_indices)
+            sampler=torch.utils.data.distributed.DistributedSampler(trainset)
     else:
         results=generate_test(path)
         img_tr=get_val_transformer(args)
@@ -306,7 +311,10 @@ def get_our_dataloader(args,path,phase,num_worker=8):
     do_shuffle = True if phase == "train" else False
     if phase == "train":
         loader1 = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=(sampler is None), num_workers=num_worker,pin_memory=True,sampler=sampler)
-        loader2 = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=4,pin_memory=True)
+        if few_ratio>0.95:
+            loader2=None
+        else:
+            loader2 = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=4,pin_memory=True)
         return loader1,loader2
     else:
         loader = data.DataLoader(dataset, batch_size=2, shuffle=do_shuffle, num_workers=4,pin_memory=True)
@@ -359,9 +367,11 @@ class MyDataset_DG(data.Dataset):
 def get_val_dataloader(path,args):
     from utils.generate_txt_label import generate_test,generate_train
     results=generate_test(path)
-    dataset=ValDataset(results,img_transformer=get_test_transformer(args))
+    dataset=DGDataset(results,img_transformer=get_val_transformer(args))
+    translate_dataset=ValDataset(results,img_transformer=get_test_transformer(args))
     dataloaer=data.DataLoader(dataset,batch_size=128, shuffle=False, num_workers=4,pin_memory=True)
-    return dataloaer
+    translate_dataloder=data.DataLoader(translate_dataset,batch_size=128,shuffle=False,num_workers=4,pin_memory=True)
+    return dataloaer,translate_dataloder
 
 def random_pairs_of_minibatches(minibatches):
     perm = torch.randperm(len(minibatches)).tolist()
