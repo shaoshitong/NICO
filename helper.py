@@ -159,6 +159,32 @@ class DGDataset(data.Dataset):
             img=self._image_transformer(img)
             return img,img_path
 
+class ValDataset(data.Dataset):
+    def __init__(self,result,img_transformer=None,val_transformer=None):
+        self.result=result
+        self._image_transformer=img_transformer
+        self.val_transformer=val_transformer
+        self.nums=10
+        self.beta=0.3
+        self.val=False
+        self.eps=1.
+    def __len__(self):
+        return len(self.result)
+    def YOCO(self,img):
+        q = self._image_transformer(img)
+        k = self._image_transformer(img)
+        c,h,w=q.size()
+        if np.random.random() < 0.5:
+            q = torch.cat([q[:,:,0:int(w/2)],k[:,:,int(w/2):w]],dim=2)
+        else:
+            q = torch.cat([q[:,0:int(h/2),:],k[:,int(h/2):h,:]],dim=1)
+        return q
+    def __getitem__(self,index):
+        img_path=self.result[index]
+        img =Image.open(img_path).convert('RGB')
+        img,P=self._image_transformer(img)
+        return img,P,img_path
+
 class EnsembleDataset(data.Dataset):
     def __init__(self, result):
         self.result=result
@@ -208,6 +234,42 @@ def get_val_transformer(args):
     img_tr = [transforms.Resize((args.image_size, args.image_size)), transforms.ToTensor(),
               transforms.Normalize([0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
     return transforms.Compose(img_tr)
+
+class Translate(object):
+    def __init__(self,first_img_tr,second_img_tr,third_img_tr):
+        self.first_img_tr=first_img_tr
+        self.second_img_tr:CIFAR10Policy=second_img_tr
+        self.third_img_tr=third_img_tr
+    def __call__(self, x):
+        x=self.first_img_tr(x)
+        x=self.second_img_tr(x)
+        x=self.third_img_tr(x)
+        high_image_ratio=0
+        high_image_total=0
+        for policy in self.second_img_tr.policies:
+            high_image_ratio+=policy.jiru
+            high_image_total+=2
+        return x,high_image_ratio/high_image_total
+
+
+
+
+def get_test_transformer(args):
+    img_tr=[
+        transforms.RandomResizedCrop((int(args.image_size), int(args.image_size)), (args.min_scale, args.max_scale)),
+        transforms.RandomHorizontalFlip(args.random_horiz_flip),
+        transforms.ColorJitter(brightness=args.jitter, contrast=args.jitter, saturation=args.jitter,
+                               hue=min(0.5, args.jitter))
+    ]
+    first_img_tr=transforms.Compose(img_tr)
+    second_img_tr=CIFAR10Policy()
+    third_img_tr=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    return Translate(first_img_tr,second_img_tr,third_img_tr)
+
+
 
 def get_ERM_dataloader(args, phase,num_worker=8):
     assert phase in ["train", "test"]
@@ -300,7 +362,7 @@ class MyDataset_DG(data.Dataset):
 def get_val_dataloader(path,args):
     from utils.generate_txt_label import generate_test,generate_train
     results=generate_test(path)
-    dataset=DGDataset(results,img_transformer=get_train_transformer(args))
+    dataset=ValDataset(results,img_transformer=get_test_transformer(args))
     dataloaer=data.DataLoader(dataset,batch_size=128, shuffle=False, num_workers=4,pin_memory=True)
     return dataloaer
 

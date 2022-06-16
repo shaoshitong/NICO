@@ -125,10 +125,13 @@ class SubPolicy:
         self.magnitude2 = ranges[operation2][magnitude_idx2]
 
     def __call__(self, img):
+        self.jiru=0
         if random.random() < self.p1:
             img = self.operation1(img, self.magnitude1, self.fillcolor)
+            self.jiru+=1
         if random.random() < self.p2:
             img = self.operation2(img,self.magnitude2,self.fillcolor)
+            self.jiru+=1
         return img
 
 

@@ -8,21 +8,21 @@ from data.dataUtils import write_result
 import helper
 
 
-def test(loader, model,epoch=100,cutmix_prob=0.1):
+def test(loader, model,epoch=100,cutmix_prob=05.):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.eval()
     result = {}
     with torch.no_grad():
         for j in tqdm(range(epoch)):
-            for i,(x,name) in enumerate(loader):
+            for i,(x,p,name) in enumerate(loader):
                 x = x.to(device)
                 y = model(x)
                 for j, subname in enumerate(list(name)):
                     subname=subname.split("/")[-1]
                     if subname in result.keys():
-                        result[subname]+=(y[j,:].detach()*cutmix_prob)
+                        result[subname]+=(y[j,:].detach()*(p[j]+cutmix_prob))
                     else:
-                        result[subname]=(y[j,:].detach()*cutmix_prob)
+                        result[subname]=(y[j,:].detach()*(p[j]+cutmix_prob))
     for name in result.keys():
         result[name]=result[name].argmax(1)
     write_result(result)
