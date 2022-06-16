@@ -24,7 +24,7 @@ def test(loader, model,epoch=100,cutmix_prob=05.):
                     else:
                         result[subname]=(y[j,:].detach()*(p[j]+cutmix_prob))
     for name in result.keys():
-        result[name]=result[name].argmax(1)
+        result[name]=result[name].argmax(0)
     write_result(result)
 
 if __name__=="__main__":
