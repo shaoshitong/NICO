@@ -9,7 +9,7 @@ import helper
 
 
 
-def test(loader,test_translate_dataloader, model,epoch=10,cutmix_prob=5):
+def test(loader,test_translate_dataloader, model,epoch=50,cutmix_prob=5):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.eval()
     result = {}
@@ -41,7 +41,7 @@ if __name__=="__main__":
     args = helper.Args()
     test_dataloader,test_translate_dataloader = helper.get_val_dataloader('/home/sst/dataset/nico/nico/test',args)
     net=model.PyramidNet(args.num_classes, args)
-    dict=torch.load("results/kd_best6.pth")['model']
+    dict=torch.load("results/kd_best_1.pth")['model']
     net.network.load_state_dict(dict,strict=True)
     net.cuda()
     test(test_dataloader,test_translate_dataloader,net.network)
