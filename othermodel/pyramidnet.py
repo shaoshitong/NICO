@@ -21,7 +21,7 @@ class ShakeDrop(Function):
     @staticmethod
     def forward(ctx, x, identity, p) -> torch.Tensor:
         ctx.p = p
-        uniform = torch.rand(x.shape[0]).cuda().view(x.shape[0],1,1,1)*2-1
+        uniform = torch.rand(x.shape[0]).cuda().view(x.shape[0], 1, 1, 1) * 2 - 1
         p = torch.bernoulli(torch.Tensor([p])).cuda()
         x = x * (p + uniform - p * uniform) + identity
         return x
@@ -29,7 +29,7 @@ class ShakeDrop(Function):
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor):
         p = ctx.p
-        uniform = torch.rand(grad_output.shape[0]).cuda().view(grad_output.shape[0],1,1,1)
+        uniform = torch.rand(grad_output.shape[0]).cuda().view(grad_output.shape[0], 1, 1, 1)
         p = torch.bernoulli(torch.Tensor([p])).cuda()
         return grad_output * (p + uniform - p * uniform), grad_output, None
 
@@ -273,10 +273,7 @@ class PyramidNet(nn.Module):
                 in_channels = out_channels
             self.features.add_module("stage{}".format(i + 1), stage)
         self.features.add_module("post_activ", PreResActivation(in_channels=in_channels))
-        self.features.add_module("final_pool", nn.AvgPool2d(
-            kernel_size=7,
-            stride=1))
-
+        self.features.add_module("final_pool", nn.AdaptiveAvgPool2d((1,1)))
         self.output = nn.Linear(
             in_features=in_channels,
             out_features=num_classes)
@@ -343,10 +340,14 @@ def get_pyramidnet(blocks,
         layers = [3, 24, 36, 3]
     elif blocks == 272:
         layers = [3, 36, 48, 3]
+    elif blocks == 273:
+        layers = [30, 30, 30]
     else:
         raise ValueError("Unsupported ResNet with number of blocks: {}".format(blocks))
-
-    init_block_channels = 64
+    if blocks == 273:
+        init_block_channels = 16
+    else:
+        init_block_channels = 64
 
     growth_add = float(alpha) / float(sum(layers))
     from functools import reduce
@@ -361,7 +362,7 @@ def get_pyramidnet(blocks,
     else:
         bottleneck = True
         channels = [[cij * 4 for cij in ci] for ci in channels]
-
+    print(channels)
     net = PyramidNet(
         channels=channels,
         init_block_channels=init_block_channels,

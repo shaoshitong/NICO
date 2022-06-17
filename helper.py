@@ -30,10 +30,10 @@ def _hparam(name, default_val, random_val_fn, random_seed=0):
 class Args():
     def __init__(self):
         self.gpu_id = 0
-        self.batch_size = 48
+        self.batch_size = 42
         self.num_classes = 60
         self.num_steps = 70
-        self.lr = 0.09
+        self.lr = 0.08
         self.resume=False
         self.weight_decay = 1e-4
         self.fewer_ratio=0.999

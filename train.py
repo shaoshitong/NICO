@@ -46,7 +46,7 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
     rank = rank * ngpus_per_node + gpu
     dist.init_process_group(backend='nccl', init_method=dist_url,
                         world_size=world_size, rank=rank)
-    net = model.PyramidNet(num_classes=60,args=args,shakedrop=False)
+    net = model.PyramidNet(num_classes=60,blocks=273,args=args,shakedrop=False)
     net.cuda(gpu)
     torch.backends.cudnn.benchmark=True
     torch.backends.cudnn.fastest=True
@@ -67,7 +67,7 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
         tnet=model.PyramidNet(args.num_classes,args,blocks=272,alpha=200)
         tnet.cuda(gpu)
         tnet.network=torch.nn.parallel.DistributedDataParallel(tnet.network,device_ids=[gpu])
-        model_ckpt=torch.load("./results/kd_best6.pth")['model']
+        model_ckpt=torch.load("./results/kd_best7.pth")['model']
         tnet.network.module.load_state_dict(model_ckpt)
         tnet.requires_grad=False
         for step in range(epoch,args.num_steps):
@@ -84,8 +84,8 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                 if args.amp:
                     with torch.cuda.amp.autocast(enabled=True):
                         all_logits = net.predict(x)
-                    with torch.no_grad():
-                        t_all_logits=tnet.predict(x)
+                        with torch.no_grad():
+                            t_all_logits=tnet.predict(x)
                     with torch.cuda.amp.autocast(enabled=True):
                         loss=kd_loss(all_logits,t_all_logits,y)
                     net.optimizer.zero_grad()
@@ -111,10 +111,10 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                         best_acc = accuracy
                         dict = {'epoch': step, 'model': net.network.module.state_dict(),
                                 'optimizer': net.optimizer.state_dict()}
-                        torch.save(dict, "results/kd_best7.pth")
+                        torch.save(dict, "results/kd_best8.pth")
                     print("ite: %d, test accuracy: %.4f" % (step + 1, accuracy))
                 else:
-                    if args.num_steps-(step+1)<5:
+                    if args.num_steps-(step+1)<2:
                         dict = {'epoch': step, 'model': net.network.module.state_dict(),
                                 'optimizer': net.optimizer.state_dict()}
                         torch.save(dict, f"results/kd_best_{args.num_steps-(step+1)}.pth")
@@ -143,10 +143,10 @@ def main_worker(gpu, ngpus_per_node,rank,world_size,dist_url,args):
                     if accuracy>best_acc:
                         best_acc=accuracy
                         dict={'epoch':step,'model':net.network.module.state_dict(),'optimizer':net.optimizer.state_dict()}
-                        torch.save(dict, "results/kd_best7.pth")
+                        torch.save(dict, "results/kd_best8.pth")
                     print("ite: %d, test accuracy: %.4f" % (step+1, accuracy))
                 else:
-                    if args.num_steps-(step+1)<5:
+                    if args.num_steps-(step+1)<2:
                         dict = {'epoch': step, 'model': net.network.module.state_dict(),
                                 'optimizer': net.optimizer.state_dict()}
                         torch.save(dict, f"results/kd_best_{args.num_steps-(step+1)}.pth")
