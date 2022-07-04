@@ -113,7 +113,7 @@ class DGDataSet(Dataset):
 
     def __getitem__(self, item):
         if self.mode == 'test':
-            img = Image.open(self.test_image_path + self.images[item])
+            img = Image.open(self.test_image_path + self.images[item]).convert('RGB')
             if self.transform_type == 'test' or self.transform_type is None:
                 img = self.test_transform(img)
             else:
@@ -122,7 +122,7 @@ class DGDataSet(Dataset):
 
         if self.mode == 'train' or self.mode == 'valid':
             img_dic = self.images[item]
-            img = Image.open(img_dic['path'])
+            img = Image.open(img_dic['path']).convert('RGB')
             img = self.YOCO(img) if 0.5 > random.random() else self.transform(img)
             y = torch.zeros(60)
             y[img_dic['category_id']] = 1
