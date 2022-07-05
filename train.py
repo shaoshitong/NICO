@@ -15,6 +15,18 @@ from models import (DenseNet, pyramidnet272, ConvNeXt, DPN, )
 from data.data import get_loader, get_test_loader, write_result
 from PIL import Image
 
+class EMA(object):
+    def __init__(self,teacher_model,student_model,momentum=0.999):
+        super(EMA, self).__init__()
+        self.teacher_model=teacher_model
+        self.student_model=student_model
+        self.momentum=momentum
+
+    @torch.no_grad()
+    def step(self):
+        for teacher_parameter,student_parameter in zip(self.teacher_model.parameters(),self.student_model.parameters()):
+                teacher_parameter.mul_(self.momentum).add_((1.0 - self.momentum)*student_parameter)
+
 
 class KDLoss(nn.KLDivLoss):
     """
@@ -60,9 +72,9 @@ class Model(nn.Module):
         return x
 
     def load_model(self):
-        if os.path.exists('lib/model.pth'):
-            start_state = torch.load('model.pth', map_location=self.device)
-            self.model.load_state_dict(start_state)
+        if os.path.exists('/root/autodl-tmp/student_20220702_101_epoch.pth'):
+            start_state = torch.load('/root/autodl-tmp/student_20220702_101_epoch.pth', map_location=self.device)['model']
+            self.load_state_dict(start_state)
             print('using loaded model')
             print('-' * 100)
 
@@ -82,10 +94,10 @@ class NoisyStudent():
                  ) -> object:
         self.result = {}
         if track_mode=='track1':
-            train_image_path: str = '/home/Bigdata/NICO/nico/train/'
-            valid_image_path: str = '/home/Bigdata/NICO/nico/train/'
-            label2id_path: str = '/home/Bigdata/NICO/dg_label_id_mapping.json'
-            test_image_path: str = '/home/Bigdata/NICO/nico/test/'
+            train_image_path: str = '/root/autodl-tmp/nico/train/'
+            valid_image_path: str = '/root/autodl-tmp/nico/train/'
+            label2id_path: str = '/root/autodl-tmp/dg_label_id_mapping.json'
+            test_image_path: str = '/root/autodl-tmp/nico/test/'
         else:
             train_image_path: str = '/home/Bigdata/NICO2/nico/train/'
             valid_image_path: str = '/home/Bigdata/NICO2/nico/train/'
@@ -158,13 +170,18 @@ class NoisyStudent():
             self.teacher.train()
             self.teacher.requires_grad_(False)
             self.KDLoss = KDLoss(total_epoch=total_epoch)
+            dict=torch.load('student_epoch.pth')
+            self.optimizer.load_state_dict(dict['optimizer'])
+            self.model.load_state_dict(dict['model'])
+            self.ema = EMA(self.teacher,self.model)
         from torch.cuda.amp import autocast, GradScaler
         scaler = GradScaler()
+        scaler.load_state_dict(dict['scaler'])
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         # self.model = nn.DataParallel(self.model, device_ids=[0, 1])
-        for epoch in range(1, total_epoch + 1):
+        for epoch in range(dict['epoch']+1, total_epoch + 1):
             self.model.train()
             self.warm_up(epoch, now_loss=train_loss, prev_loss=prev_loss)
             prev_loss = train_loss
@@ -204,6 +221,8 @@ class NoisyStudent():
                         loss.backward()
                         nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                         self.optimizer.step()
+                    if epoch>50:
+                        self.ema.step()
                 else:
                     if fp16:
                         with autocast():
@@ -256,7 +275,7 @@ class NoisyStudent():
         elif now_loss is not None and prev_loss is not None:
             delta = prev_loss - now_loss
             if delta / now_loss < 0.02 and delta < 0.02:
-                self.optimizer.param_groups[0]['lr'] *= 0.9
+                self.optimizer.param_groups[0]['lr'] *= 0.95
 
         p_lr = self.optimizer.param_groups[0]['lr']
         print(f'lr = {p_lr}')
@@ -283,11 +302,11 @@ if __name__ == '__main__':
 
     paser = argparse.ArgumentParser()
     paser.add_argument('-b', '--batch_size', default=48)
-    paser.add_argument('-t', '--total_epoch', default=200)
+    paser.add_argument('-t', '--total_epoch', default=300)
     paser.add_argument('-l', '--lr', default=0.1)
     paser.add_argument('-e', '--test', default=False)
-    paser.add_argument('-m', '--mode', default='track2')
-    paser.add_argument('-k', '--kd',default=False,type=bool)
+    paser.add_argument('-m', '--mode', default='track1')
+    paser.add_argument('-k', '--kd',default=True,type=bool)
     args = paser.parse_args()
     batch_size = int(args.batch_size)
     total_epoch = int(args.total_epoch)
