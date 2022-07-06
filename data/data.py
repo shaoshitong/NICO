@@ -113,7 +113,7 @@ class DGDataSet(Dataset):
 
     def __getitem__(self, item):
         if self.mode == 'test':
-            img = Image.open(self.test_image_path + self.images[item]).convert('RGB')
+            img = Image.open(self.test_image_path + self.images[item])
             if self.transform_type == 'test' or self.transform_type is None:
                 img = self.test_transform(img)
             else:
@@ -122,7 +122,7 @@ class DGDataSet(Dataset):
 
         if self.mode == 'train' or self.mode == 'valid':
             img_dic = self.images[item]
-            img = Image.open(img_dic['path']).convert('RGB')
+            img = Image.open(img_dic['path'])
             img = self.YOCO(img) if 0.5 > random.random() else self.transform(img)
             y = torch.zeros(60)
             y[img_dic['category_id']] = 1
@@ -176,7 +176,7 @@ def get_loader(train_image_path,
                label2id_path,
                batch_size=32,
                valid_category='autumn',
-               num_workers=16,
+               num_workers=4,
                track_mode='track1'):
     '''
     if you are familiar with me, you will know this function aims to get train loader and valid loader
@@ -195,12 +195,12 @@ def get_loader(train_image_path,
     MyDataSet = Track1DataSet if track_mode=='track1' else Track2DataSet
     train_set = MyDataSet(mode='train', train_image_path=train_image_path,
                           label2id_path=label2id_path, valid_category=valid_category)
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers,pin_memory=True)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     if valid_category is None:
         return train_loader
     valid_set = MyDataSet(mode='valid', valid_category=valid_category,
                           train_image_path=valid_image_path, label2id_path=label2id_path)
-    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=True,pin_memory=True)
+    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=True)
 
     print('managed to get loader!!!!!')
     print('-' * 100)

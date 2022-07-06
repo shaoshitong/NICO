@@ -15,18 +15,6 @@ from models import (DenseNet, pyramidnet272, ConvNeXt, DPN, )
 from data.data import get_loader, get_test_loader, write_result
 from PIL import Image
 
-class EMA(object):
-    def __init__(self,teacher_model,student_model,momentum=0.999):
-        super(EMA, self).__init__()
-        self.teacher_model=teacher_model
-        self.student_model=student_model
-        self.momentum=momentum
-
-    @torch.no_grad()
-    def step(self):
-        for teacher_parameter,student_parameter in zip(self.teacher_model.parameters(),self.student_model.parameters()):
-                teacher_parameter.mul_(self.momentum).add_((1.0 - self.momentum)*student_parameter)
-
 
 class KDLoss(nn.KLDivLoss):
     """
@@ -72,14 +60,14 @@ class Model(nn.Module):
         return x
 
     def load_model(self):
-        if os.path.exists('/root/autodl-tmp/student_20220702_101_epoch.pth'):
-            start_state = torch.load('/root/autodl-tmp/student_20220702_101_epoch.pth', map_location=self.device)['model']
+        if os.path.exists('lib/track2_original_epoch_124.pth'):
+            start_state = torch.load('lib/track2_original_epoch_124.pth', map_location=self.device)['model']
             self.load_state_dict(start_state)
-            print('using loaded model')
+            print('using teacher loaded model')
             print('-' * 100)
 
     def save_model(self, name):
-        result = self.model.state_dict()
+        result = self.state_dict()
         torch.save(result, name)
 
 
@@ -93,16 +81,16 @@ class NoisyStudent():
                  KD=False,
                  ) -> object:
         self.result = {}
-        if track_mode=='track1':
-            train_image_path: str = '/root/autodl-tmp/nico/train/'
-            valid_image_path: str = '/root/autodl-tmp/nico/train/'
-            label2id_path: str = '/root/autodl-tmp/dg_label_id_mapping.json'
-            test_image_path: str = '/root/autodl-tmp/nico/test/'
+        if track_mode == 'track1':
+            train_image_path: str = '/home/Bigdata/NICO/nico/train/'
+            valid_image_path: str = '/home/Bigdata/NICO/nico/train/'
+            label2id_path: str = '/home/Bigdata/NICO/dg_label_id_mapping.json'
+            test_image_path: str = '/home/Bigdata/NICO/nico/test/'
         else:
-            train_image_path: str = '/home/Bigdata/NICO2/nico/train/'
-            valid_image_path: str = '/home/Bigdata/NICO2/nico/train/'
-            label2id_path: str = '/home/Bigdata/NICO2/ood_label_id_mapping.json'
-            test_image_path: str = '/home/Bigdata/NICO2/nico/test/'
+            train_image_path: str = '/home/sst/dataset/nico2/nico/train/'
+            valid_image_path: str = '/home/sst/dataset/nico2/nico/train/'
+            label2id_path: str = '/home/sst/dataset/nico2/ood_label_id_mapping.json'
+            test_image_path: str = '/home/sst/dataset/nico2/nico/test/'
         self.train_loader = get_loader(batch_size=batch_size,
                                        valid_category=None,
                                        train_image_path=train_image_path,
@@ -124,6 +112,12 @@ class NoisyStudent():
         self.KD = KD
         self.lr = lr
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
+        if self.KD:
+            self.teacher = Model().cuda(self.gpu)
+            self.teacher.load_model()
+            self.teacher.train()
+            self.teacher.requires_grad_(False)
+            self.KDLoss = KDLoss(total_epoch=200)
 
     def save_result(self, epoch=None):
         result = {}
@@ -164,24 +158,13 @@ class NoisyStudent():
               warmup_epoch=1,
               warmup_cycle=12000,
               ):
-        if self.KD:
-            self.teacher = Model().cuda(self.gpu)
-            self.teacher.load_model()
-            self.teacher.train()
-            self.teacher.requires_grad_(False)
-            self.KDLoss = KDLoss(total_epoch=total_epoch)
-            dict=torch.load('student_epoch.pth')
-            self.optimizer.load_state_dict(dict['optimizer'])
-            self.model.load_state_dict(dict['model'])
-            self.ema = EMA(self.teacher,self.model)
         from torch.cuda.amp import autocast, GradScaler
         scaler = GradScaler()
-        scaler.load_state_dict(dict['scaler'])
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         # self.model = nn.DataParallel(self.model, device_ids=[0, 1])
-        for epoch in range(dict['epoch']+1, total_epoch + 1):
+        for epoch in range(1, total_epoch + 1):
             self.model.train()
             self.warm_up(epoch, now_loss=train_loss, prev_loss=prev_loss)
             prev_loss = train_loss
@@ -221,8 +204,6 @@ class NoisyStudent():
                         loss.backward()
                         nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                         self.optimizer.step()
-                    if epoch>50:
-                        self.ema.step()
                 else:
                     if fp16:
                         with autocast():
@@ -297,27 +278,62 @@ class NoisyStudent():
         print('-' * 100)
 
 
+def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch, dist_url, world_size):
+    print("Use GPU: {} for training".format(gpu))
+    rank = 0  # 单机
+    dist_backend = 'nccl'
+    rank = rank * ngpus_per_node + gpu
+    dist.init_process_group(backend=dist_backend, init_method=dist_url,
+                            world_size=world_size, rank=rank)
+    torch.cuda.set_device(gpu)
+    batch_size = int(batch_size / ngpus_per_node)
+    x = NoisyStudent(gpu=gpu, batch_size=batch_size, lr=lr, KD=KD, track_mode=track_mode)
+    x.model = torch.nn.DataParallel(x.model, device_ids=[gpu])
+    if KD:
+        x.teacher = torch.nn.DataParallel(x.teacher, device_ids=[gpu])
+    train_sampler = torch.utils.data.distributed.DistributedSampler(x.train_loader.dataset)
+    x.train_loader = torch.utils.data.DataLoader(x.train_loader.dataset, batch_size=batch_size, sampler=train_sampler,
+                                                 num_workers=6)
+    x.train(total_epoch=total_epoch)
+    x.save_result()
+
+
 if __name__ == '__main__':
     import argparse
 
     paser = argparse.ArgumentParser()
     paser.add_argument('-b', '--batch_size', default=48)
-    paser.add_argument('-t', '--total_epoch', default=300)
+    paser.add_argument('-t', '--total_epoch', default=200)
     paser.add_argument('-l', '--lr', default=0.1)
     paser.add_argument('-e', '--test', default=False)
-    paser.add_argument('-m', '--mode', default='track1')
-    paser.add_argument('-k', '--kd',default=True,type=bool)
+    paser.add_argument('-m', '--mode', default='track2')
+    paser.add_argument('-k', '--kd', default=True, type=bool)
+    paser.add_argument('-p', '--parallel', default=True, type=bool)
     args = paser.parse_args()
     batch_size = int(args.batch_size)
     total_epoch = int(args.total_epoch)
     track_mode = str(args.mode)
     lr = float(args.lr)
+    parallel = args.parallel
     KD = args.kd
-    if args.test:
-        x = NoisyStudent(gpu=0, batch_size=batch_size, lr=lr, track_mode=track_mode)
-        x.predict()
-        x.save_result()
+    if parallel:
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
+        world_size = 1
+        port_id = 10000 + np.random.randint(0, 1000)
+        dist_url = 'tcp://127.0.0.1:' + str(port_id)
+        ngpus_per_node = torch.cuda.device_count()
+        print('ngpus_per_node', ngpus_per_node)
+        world_size = ngpus_per_node * world_size
+        print('multiprocessing_distributed')
+        torch.multiprocessing.set_start_method('spawn')
+        mp.spawn(main_worker, nprocs=ngpus_per_node,
+                 args=(ngpus_per_node, batch_size, lr, KD, track_mode, total_epoch, dist_url, world_size))
     else:
-        x = NoisyStudent(gpu=0, batch_size=batch_size, lr=lr, KD=KD, track_mode=track_mode)
-        x.train(total_epoch=total_epoch)
-        x.save_result()
+        if args.test:
+            x = NoisyStudent(gpu=0, batch_size=batch_size, lr=lr, track_mode=track_mode)
+            x.predict()
+            x.save_result()
+        else:
+            x = NoisyStudent(gpu=0, batch_size=batch_size, lr=lr, KD=KD, track_mode=track_mode)
+            x.train(total_epoch=total_epoch)
+            x.save_result()
