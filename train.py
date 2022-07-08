@@ -13,6 +13,7 @@ import torch.multiprocessing as mp
 import torch.utils.data.distributed
 from models import (DenseNet, pyramidnet272, ConvNeXt, DPN, )
 from data.data import get_loader, get_test_loader, write_result
+from utils import (EMA,SWA)
 from PIL import Image
 
 
@@ -87,10 +88,10 @@ class NoisyStudent():
             label2id_path: str = '/home/Bigdata/NICO/dg_label_id_mapping.json'
             test_image_path: str = '/home/Bigdata/NICO/nico/test/'
         else:
-            train_image_path: str = '/home/sst/dataset/nico2/nico/train/'
-            valid_image_path: str = '/home/sst/dataset/nico2/nico/train/'
-            label2id_path: str = '/home/sst/dataset/nico2/ood_label_id_mapping.json'
-            test_image_path: str = '/home/sst/dataset/nico2/nico/test/'
+            train_image_path: str = '/home/Bigdata/NICO2/nico/train/'
+            valid_image_path: str = '/home/Bigdata/NICO2/nico/train/'
+            label2id_path: str = '/home/Bigdata/NICO2/ood_label_id_mapping.json'
+            test_image_path: str = '/home/Bigdata/NICO2/nico/test/'
         self.train_loader = get_loader(batch_size=batch_size,
                                        valid_category=None,
                                        train_image_path=train_image_path,
@@ -112,6 +113,7 @@ class NoisyStudent():
         self.KD = KD
         self.lr = lr
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
+        self.optimizer = SWA(self.optimizer,swa_start=100, swa_freq=5, swa_lr=0.0005)
         if self.KD:
             self.teacher = Model().cuda(self.gpu)
             self.teacher.load_model()
@@ -204,6 +206,7 @@ class NoisyStudent():
                         loss.backward()
                         nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                         self.optimizer.step()
+
                 else:
                     if fp16:
                         with autocast():
@@ -249,14 +252,26 @@ class NoisyStudent():
                     torch.save(save_dict, 'student_epoch.pth')
                 else:
                     torch.save(save_dict, 'original_epoch.pth')
-
+        self.optimizer.swap_swa_sgd()
+        self.optimizer.bn_update(self.train_loader,self.model)
+        if self.gpu == 0:
+            save_dict = {
+                'model': self.model.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+                'epoch': 200,
+                'scaler': scaler.state_dict()
+            }
+            if self.KD:
+                torch.save(save_dict, 'student_epoch_last.pth')
+            else:
+                torch.save(save_dict, 'original_epoch_last.pth')
     def warm_up(self, epoch, now_loss=None, prev_loss=None):
         if epoch <= 10:
             self.optimizer.param_groups[0]['lr'] = self.lr * epoch / 10
         elif now_loss is not None and prev_loss is not None:
             delta = prev_loss - now_loss
             if delta / now_loss < 0.02 and delta < 0.02:
-                self.optimizer.param_groups[0]['lr'] *= 0.95
+                self.optimizer.param_groups[0]['lr'] *= 0.9
 
         p_lr = self.optimizer.param_groups[0]['lr']
         print(f'lr = {p_lr}')
@@ -303,12 +318,12 @@ if __name__ == '__main__':
 
     paser = argparse.ArgumentParser()
     paser.add_argument('-b', '--batch_size', default=48)
-    paser.add_argument('-t', '--total_epoch', default=200)
+    paser.add_argument('-t', '--total_epoch', default=140)
     paser.add_argument('-l', '--lr', default=0.1)
     paser.add_argument('-e', '--test', default=False)
     paser.add_argument('-m', '--mode', default='track2')
     paser.add_argument('-k', '--kd', default=True, type=bool)
-    paser.add_argument('-p', '--parallel', default=True, type=bool)
+    paser.add_argument('-p', '--parallel', default=False, type=bool)
     args = paser.parse_args()
     batch_size = int(args.batch_size)
     total_epoch = int(args.total_epoch)
