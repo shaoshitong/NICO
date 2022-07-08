@@ -120,6 +120,7 @@ class NoisyStudent():
             self.teacher.train()
             self.teacher.requires_grad_(False)
             self.KDLoss = KDLoss(total_epoch=200)
+            self.ema=EMA([self.teacher],[self.model])
 
     def save_result(self, epoch=None):
         result = {}
@@ -206,7 +207,8 @@ class NoisyStudent():
                         loss.backward()
                         nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                         self.optimizer.step()
-
+                    if epoch%50==0:
+                        self.ema.step()
                 else:
                     if fp16:
                         with autocast():
