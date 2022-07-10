@@ -113,7 +113,7 @@ class NoisyStudent():
         self.KD = KD
         self.lr = lr
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
-        self.optimizer = SWA(self.optimizer,swa_start=100, swa_freq=5, swa_lr=0.0005)
+        # self.optimizer = SWA(self.optimizer,swa_start=100*len(self.train_loader), swa_freq=20, swa_lr=0.0005)
         if self.KD:
             self.teacher = Model().cuda(self.gpu)
             self.teacher.load_model()
@@ -166,8 +166,15 @@ class NoisyStudent():
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
-        # self.model = nn.DataParallel(self.model, device_ids=[0, 1])
-        for epoch in range(1, total_epoch + 1):
+        # dict=torch.load("student_epoch_tmp.pth")
+        # start_epoch=dict['epoch']
+        # self.model.load_state_dict(dict['model'])
+        # self.optimizer.load_state_dict(dict['optimizer'])
+        # scaler.load_state_dict(dict['scaler'])
+        # print("start epoch:",start_epoch)
+        # # self.model = nn.DataParallel(self.model, device_ids=[0, 1])
+        start_epoch=0
+        for epoch in range(start_epoch, total_epoch + 1):
             self.model.train()
             self.warm_up(epoch, now_loss=train_loss, prev_loss=prev_loss)
             prev_loss = train_loss
