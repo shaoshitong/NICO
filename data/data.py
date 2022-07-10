@@ -35,7 +35,7 @@ class DGDataSet(Dataset):
         self.beta = 0.3
         self.transform = transforms.Compose([
             # add transforms here
-            transforms.RandomResizedCrop((224, 224), scale=(0.75, 1.0)),
+            transforms.RandomResizedCrop((384, 384), scale=(0.75, 1.0)),
             transforms.RandomHorizontalFlip(0.5),
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
@@ -46,7 +46,7 @@ class DGDataSet(Dataset):
         ])
 
         self.test_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((384, 384)),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])

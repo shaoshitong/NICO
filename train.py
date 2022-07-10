@@ -83,13 +83,13 @@ class NoisyStudent():
                  ) -> object:
         self.result = {}
         if track_mode == 'track1':
-            train_image_path: str = '/home/Bigdata/NICO/nico/train/'
-            valid_image_path: str = '/home/Bigdata/NICO/nico/train/'
-            label2id_path: str = '/home/Bigdata/NICO/dg_label_id_mapping.json'
-            test_image_path: str = '/home/Bigdata/NICO/nico/test/'
+            train_image_path: str = '/root/autodl-tmp/nico/train/'
+            valid_image_path: str = '/root/autodl-tmp/nico/train/'
+            label2id_path: str = '/root/autodl-tmp/dg_label_id_mapping.json'
+            test_image_path: str = '/root/autodl-tmp/nico/test/'
         else:
-            train_image_path: str = '/home/Bigdata/NICO2/nico/train/'
-            valid_image_path: str = '/home/Bigdata/NICO2/nico/train/'
+            train_image_path: str = '/autodl-tmp/nico/train/'
+            valid_image_path: str = '/autodl-tmp/nico/train/'
             label2id_path: str = '/home/Bigdata/NICO2/ood_label_id_mapping.json'
             test_image_path: str = '/home/Bigdata/NICO2/nico/test/'
         self.train_loader = get_loader(batch_size=batch_size,
@@ -112,7 +112,7 @@ class NoisyStudent():
         self.model = Model().cuda(self.gpu)
         self.KD = KD
         self.lr = lr
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         # self.optimizer = SWA(self.optimizer,swa_start=100*len(self.train_loader), swa_freq=20, swa_lr=0.0005)
         if self.KD:
             self.teacher = Model().cuda(self.gpu)
@@ -166,14 +166,16 @@ class NoisyStudent():
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
-        # dict=torch.load("student_epoch_tmp.pth")
+        dict=torch.load("student_epoch_best.pth")
         # start_epoch=dict['epoch']
-        # self.model.load_state_dict(dict['model'])
+        self.model.module.load_state_dict(dict['model'])
+        print("successfully load model!!!!!!!!!`")
         # self.optimizer.load_state_dict(dict['optimizer'])
         # scaler.load_state_dict(dict['scaler'])
         # print("start epoch:",start_epoch)
         # # self.model = nn.DataParallel(self.model, device_ids=[0, 1])
         start_epoch=0
+        myiter=0
         for epoch in range(start_epoch, total_epoch + 1):
             self.model.train()
             self.warm_up(epoch, now_loss=train_loss, prev_loss=prev_loss)
@@ -231,19 +233,23 @@ class NoisyStudent():
                         _, y = torch.max(y, dim=1)
                     train_acc += (torch.sum(pre == y).item()) / y.shape[0]
                     train_loss += loss.item()
-                    self.optimizer.zero_grad()
+                    if myiter%2==0:
+                        self.optimizer.zero_grad()
 
                     if fp16:
                         scaler.scale(loss).backward()
-                        scaler.unscale_(self.optimizer)
-                        nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
-                        scaler.step(self.optimizer)
-                        scaler.update()
+                        if myiter%2==1:
+                            scaler.unscale_(self.optimizer)
+                            nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+                            scaler.step(self.optimizer)
+                            scaler.update()
                     else:
                         loss.backward()
-                        nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
-                        self.optimizer.step()
+                        if myiter%2==1:
+                            nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
+                            self.optimizer.step()
                 step += 1
+                myiter+=1
                 if step % 10 == 0:
                     pbar.set_postfix_str(f'loss = {train_loss / step}, acc = {train_acc / step}')
 
@@ -280,7 +286,7 @@ class NoisyStudent():
         elif now_loss is not None and prev_loss is not None:
             delta = prev_loss - now_loss
             if delta / now_loss < 0.02 and delta < 0.02:
-                self.optimizer.param_groups[0]['lr'] *= 0.9
+                self.optimizer.param_groups[0]['lr'] *= 0.8
 
         p_lr = self.optimizer.param_groups[0]['lr']
         print(f'lr = {p_lr}')
@@ -326,13 +332,13 @@ if __name__ == '__main__':
     import argparse
 
     paser = argparse.ArgumentParser()
-    paser.add_argument('-b', '--batch_size', default=48)
-    paser.add_argument('-t', '--total_epoch', default=140)
-    paser.add_argument('-l', '--lr', default=0.1)
+    paser.add_argument('-b', '--batch_size', default=36)
+    paser.add_argument('-t', '--total_epoch', default=100)
+    paser.add_argument('-l', '--lr', default=0.0001)
     paser.add_argument('-e', '--test', default=False)
-    paser.add_argument('-m', '--mode', default='track2')
-    paser.add_argument('-k', '--kd', default=True, type=bool)
-    paser.add_argument('-p', '--parallel', default=False, type=bool)
+    paser.add_argument('-m', '--mode', default='track1')
+    paser.add_argument('-k', '--kd', default=False, type=bool)
+    paser.add_argument('-p', '--parallel', default=True, type=bool)
     args = paser.parse_args()
     batch_size = int(args.batch_size)
     total_epoch = int(args.total_epoch)

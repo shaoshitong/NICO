@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pytorch_optimizer import AdaBound
+#from pytorch_optimizer import AdaBound
 class EMA(object):
     def __init__(self,teacher_model_list,student_model_list,momentum=0.999):
         super(EMA, self).__init__()
