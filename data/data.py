@@ -176,7 +176,7 @@ def get_loader(train_image_path,
                label2id_path,
                batch_size=32,
                valid_category='autumn',
-               num_workers=4,
+               num_workers=8,
                track_mode='track1'):
     '''
     if you are familiar with me, you will know this function aims to get train loader and valid loader

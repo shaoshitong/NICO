@@ -15,7 +15,7 @@ from models import (DenseNet, pyramidnet272, ConvNeXt, DPN, )
 from data.data import get_loader, get_test_loader, write_result
 from utils import (EMA,SWA)
 from PIL import Image
-
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 class KDLoss(nn.KLDivLoss):
     """
@@ -166,9 +166,9 @@ class NoisyStudent():
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
-        dict=torch.load("student_epoch_best.pth")
-        # start_epoch=dict['epoch']
-        self.model.module.load_state_dict(dict['model'])
+        dict=torch.load("original_epoch.pth")
+        #start_epoch=dict['epoch']
+        self.model.load_state_dict(dict['model'])
         print("successfully load model!!!!!!!!!`")
         # self.optimizer.load_state_dict(dict['optimizer'])
         # scaler.load_state_dict(dict['scaler'])
@@ -233,19 +233,19 @@ class NoisyStudent():
                         _, y = torch.max(y, dim=1)
                     train_acc += (torch.sum(pre == y).item()) / y.shape[0]
                     train_loss += loss.item()
-                    if myiter%2==0:
+                    if myiter%4==0:
                         self.optimizer.zero_grad()
 
                     if fp16:
                         scaler.scale(loss).backward()
-                        if myiter%2==1:
+                        if myiter%4==3:
                             scaler.unscale_(self.optimizer)
                             nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                             scaler.step(self.optimizer)
                             scaler.update()
                     else:
                         loss.backward()
-                        if myiter%2==1:
+                        if myiter%4==3:
                             nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                             self.optimizer.step()
                 step += 1
@@ -267,8 +267,8 @@ class NoisyStudent():
                     torch.save(save_dict, 'student_epoch.pth')
                 else:
                     torch.save(save_dict, 'original_epoch.pth')
-        self.optimizer.swap_swa_sgd()
-        self.optimizer.bn_update(self.train_loader,self.model)
+        #self.optimizer.swap_swa_sgd()
+        #self.optimizer.bn_update(self.train_loader,self.model)
         if self.gpu == 0:
             save_dict = {
                 'model': self.model.state_dict(),
@@ -281,7 +281,7 @@ class NoisyStudent():
             else:
                 torch.save(save_dict, 'original_epoch_last.pth')
     def warm_up(self, epoch, now_loss=None, prev_loss=None):
-        if epoch <= 10:
+        if epoch <= -1:
             self.optimizer.param_groups[0]['lr'] = self.lr * epoch / 10
         elif now_loss is not None and prev_loss is not None:
             delta = prev_loss - now_loss
@@ -313,17 +313,19 @@ def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch,
     rank = 0  # 单机
     dist_backend = 'nccl'
     rank = rank * ngpus_per_node + gpu
+    print("world_size:",world_size)
     dist.init_process_group(backend=dist_backend, init_method=dist_url,
                             world_size=world_size, rank=rank)
-    torch.cuda.set_device(gpu)
+    #torch.cuda.set_device(gpu)
     batch_size = int(batch_size / ngpus_per_node)
+    print("sub batch size is",batch_size,gpu)
     x = NoisyStudent(gpu=gpu, batch_size=batch_size, lr=lr, KD=KD, track_mode=track_mode)
-    x.model = torch.nn.DataParallel(x.model, device_ids=[gpu])
+    x.model = DDP(x.model, device_ids=[gpu],output_device=gpu)
     if KD:
-        x.teacher = torch.nn.DataParallel(x.teacher, device_ids=[gpu])
+        x.teacher = DDP(x.teacher, device_ids=[gpu],output_device=gpu)
     train_sampler = torch.utils.data.distributed.DistributedSampler(x.train_loader.dataset)
     x.train_loader = torch.utils.data.DataLoader(x.train_loader.dataset, batch_size=batch_size, sampler=train_sampler,
-                                                 num_workers=6)
+                                                 num_workers=4)
     x.train(total_epoch=total_epoch)
     x.save_result()
 
@@ -332,7 +334,7 @@ if __name__ == '__main__':
     import argparse
 
     paser = argparse.ArgumentParser()
-    paser.add_argument('-b', '--batch_size', default=36)
+    paser.add_argument('-b', '--batch_size', default=26*2)
     paser.add_argument('-t', '--total_epoch', default=100)
     paser.add_argument('-l', '--lr', default=0.0001)
     paser.add_argument('-e', '--test', default=False)
@@ -347,7 +349,9 @@ if __name__ == '__main__':
     parallel = args.parallel
     KD = args.kd
     if parallel:
-        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
+        os.environ['MASTER_ADDR'] = '127.0.0.1'  #
+        os.environ['MASTER_PORT'] = '8889'  #
         world_size = 1
         port_id = 10000 + np.random.randint(0, 1000)
         dist_url = 'tcp://127.0.0.1:' + str(port_id)
