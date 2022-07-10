@@ -122,17 +122,13 @@ class NoisyStudent():
             self.KDLoss = KDLoss(total_epoch=200)
             self.ema=EMA([self.teacher],[self.model])
 
-    def save_result(self, epoch=None):
+    def save_result(self, epoch=None,gpu=0):
         result = {}
         for name, pre in list(self.result.items()):
             _, y = torch.max(pre, dim=1)
             result[name] = y.item()
 
-        if epoch is not None:
-            write_result(result, path='prediction' + str(epoch) + '.json')
-        else:
-            write_result(result)
-
+        write_result(result, path='prediction' + str(gpu) + '.json')
         return result
 
     def predict(self):
@@ -141,11 +137,13 @@ class NoisyStudent():
             self.model.eval()
             for x, names in tqdm(self.test_loader_predict):
                 x = x.cuda()
+                print(x.shape)
                 x = self.model(x)
                 for i, name in enumerate(list(names)):
                     self.result[name] = x[i, :].unsqueeze(0)  # 1, D
             print('teacher have given his predictions!')
             print('-' * 100)
+        return self.result
 
     def get_label(self, names):
         y = []
@@ -292,8 +290,7 @@ class NoisyStudent():
         print(f'lr = {p_lr}')
 
     @torch.no_grad()
-    def TTA(self, total_epoch=10, aug_weight=0.5):
-        self.predict()
+    def TTA(self, total_epoch=30, aug_weight=0.5):
         print('now we are doing TTA')
         for epoch in range(1, total_epoch + 1):
             self.model.eval()
@@ -301,14 +298,16 @@ class NoisyStudent():
                 x = x.cuda(self.gpu)
                 x = self.model(x)
                 for i, name in enumerate(list(names)):
-                    self.result[name] += x[i, :].unsqueeze(0) * aug_weight  # 1, D
+                    if name in self.result:
+                        self.result[name] += x[i, :].unsqueeze(0) * aug_weight  # 1, D
+                    else:
+                        self.result[name] = x[i,:].unsqueeze(0)*aug_weight
 
         print('TTA finished')
-        self.save_result()
         print('-' * 100)
 
 
-def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch, dist_url, world_size):
+def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch, dist_url, world_size,result):
     print("Use GPU: {} for training".format(gpu))
     rank = 0  # 单机
     dist_backend = 'nccl'
@@ -323,21 +322,24 @@ def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch,
     x.model = DDP(x.model, device_ids=[gpu],output_device=gpu)
     if KD:
         x.teacher = DDP(x.teacher, device_ids=[gpu],output_device=gpu)
-    train_sampler = torch.utils.data.distributed.DistributedSampler(x.train_loader.dataset)
-    x.train_loader = torch.utils.data.DataLoader(x.train_loader.dataset, batch_size=batch_size, sampler=train_sampler,
-                                                 num_workers=6,pin_memory=True)
-    x.train(total_epoch=total_epoch)
-    x.save_result()
+    dict=torch.load("original_epoch.pth")['model']
+    x.model.load_state_dict(dict)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(x.test_loader_student.dataset)
+    x.test_loader_student = torch.utils.data.DataLoader(x.test_loader_student.dataset, batch_size=batch_size,
+                                                        sampler=train_sampler,num_workers=6,pin_memory=True)
+    #x.train(total_epoch=total_epoch)
+    x.TTA()
+    x.save_result(gpu=gpu)
 
 
 if __name__ == '__main__':
     import argparse
 
     paser = argparse.ArgumentParser()
-    paser.add_argument('-b', '--batch_size', default=12*4)
+    paser.add_argument('-b', '--batch_size', default=24*4)
     paser.add_argument('-t', '--total_epoch', default=100)
     paser.add_argument('-l', '--lr', default=0.0001)
-    paser.add_argument('-e', '--test', default=False)
+    paser.add_argument('-e', '--test', default=True)
     paser.add_argument('-m', '--mode', default='track1')
     paser.add_argument('-k', '--kd', default=False, type=bool)
     paser.add_argument('-p', '--parallel', default=True, type=bool)
@@ -349,6 +351,7 @@ if __name__ == '__main__':
     parallel = args.parallel
     KD = args.kd
     if parallel:
+        result={}
         os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
         os.environ['MASTER_ADDR'] = '127.0.0.1'  #
         os.environ['MASTER_PORT'] = '8889'  #
@@ -361,10 +364,13 @@ if __name__ == '__main__':
         print('multiprocessing_distributed')
         torch.multiprocessing.set_start_method('spawn')
         mp.spawn(main_worker, nprocs=ngpus_per_node,
-                 args=(ngpus_per_node, batch_size, lr, KD, track_mode, total_epoch, dist_url, world_size))
+                 args=(ngpus_per_node, batch_size, lr, KD, track_mode, total_epoch, dist_url, world_size,result))
     else:
         if args.test:
+
             x = NoisyStudent(gpu=0, batch_size=batch_size, lr=lr, track_mode=track_mode)
+            dict=torch.load("original_epoch.pth")['model']
+            x.model.load_state_dict(dict)
             x.predict()
             x.save_result()
         else:
