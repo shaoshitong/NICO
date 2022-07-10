@@ -316,7 +316,7 @@ def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch,
     print("world_size:",world_size)
     dist.init_process_group(backend=dist_backend, init_method=dist_url,
                             world_size=world_size, rank=rank)
-    #torch.cuda.set_device(gpu)
+    torch.cuda.set_device(gpu)
     batch_size = int(batch_size / ngpus_per_node)
     print("sub batch size is",batch_size,gpu)
     x = NoisyStudent(gpu=gpu, batch_size=batch_size, lr=lr, KD=KD, track_mode=track_mode)
@@ -325,7 +325,7 @@ def main_worker(gpu, ngpus_per_node, batch_size, lr, KD, track_mode,total_epoch,
         x.teacher = DDP(x.teacher, device_ids=[gpu],output_device=gpu)
     train_sampler = torch.utils.data.distributed.DistributedSampler(x.train_loader.dataset)
     x.train_loader = torch.utils.data.DataLoader(x.train_loader.dataset, batch_size=batch_size, sampler=train_sampler,
-                                                 num_workers=4)
+                                                 num_workers=6,pin_memory=True)
     x.train(total_epoch=total_epoch)
     x.save_result()
 
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     import argparse
 
     paser = argparse.ArgumentParser()
-    paser.add_argument('-b', '--batch_size', default=26*2)
+    paser.add_argument('-b', '--batch_size', default=12*4)
     paser.add_argument('-t', '--total_epoch', default=100)
     paser.add_argument('-l', '--lr', default=0.0001)
     paser.add_argument('-e', '--test', default=False)
