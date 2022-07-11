@@ -1,17 +1,17 @@
-from torchvision.models import DenseNet
-import torch
-import torchvision
-import re
+from collections import OrderedDict
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as cp
-from collections import OrderedDict
-from torchvision.models.densenet import _DenseBlock,_Transition
+import torchvision
 from torch import Tensor
-from typing import Any, List, Tuple
-class DenseNetV2(torchvision.models.DenseNet):
+from torchvision.models import DenseNet
+from torchvision.models.densenet import _DenseBlock, _Transition
 
+
+class DenseNetV2(torchvision.models.DenseNet):
     def __init__(
         self,
         growth_rate: int = 40,
@@ -20,25 +20,40 @@ class DenseNetV2(torchvision.models.DenseNet):
         bn_size: int = 4,
         drop_rate: float = 0,
         num_classes: int = 10,
-        memory_efficient: bool = False
+        memory_efficient: bool = False,
     ) -> None:
 
-        super(DenseNetV2, self).__init__(growth_rate,
-                                               block_config,
-                                               num_init_features,
-                                               bn_size,
-                                               drop_rate,
-                                               num_classes,
-                                               memory_efficient)
+        super(DenseNetV2, self).__init__(
+            growth_rate,
+            block_config,
+            num_init_features,
+            bn_size,
+            drop_rate,
+            num_classes,
+            memory_efficient,
+        )
 
         # First convolution
-        self.features = nn.Sequential(OrderedDict([
-                ('conv0', nn.Conv2d(3, num_init_features, kernel_size=(7, 7), stride=(2, 2),
-                                    padding=(3, 3), bias=False)),
-                ('norm0', nn.BatchNorm2d(num_init_features)),
-                ('relu0', nn.SiLU(inplace=True)),
-                ('pool0', nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))),
-            ]))
+        self.features = nn.Sequential(
+            OrderedDict(
+                [
+                    (
+                        "conv0",
+                        nn.Conv2d(
+                            3,
+                            num_init_features,
+                            kernel_size=(7, 7),
+                            stride=(2, 2),
+                            padding=(3, 3),
+                            bias=False,
+                        ),
+                    ),
+                    ("norm0", nn.BatchNorm2d(num_init_features)),
+                    ("relu0", nn.SiLU(inplace=True)),
+                    ("pool0", nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))),
+                ]
+            )
+        )
         # Each denseblock
         num_features = num_init_features
         for i, num_layers in enumerate(block_config):
@@ -48,21 +63,22 @@ class DenseNetV2(torchvision.models.DenseNet):
                 bn_size=bn_size,
                 growth_rate=growth_rate,
                 drop_rate=drop_rate,
-                memory_efficient=memory_efficient
+                memory_efficient=memory_efficient,
             )
-            self.features.add_module('denseblock%d' % (i + 1), block)
+            self.features.add_module("denseblock%d" % (i + 1), block)
             num_features = num_features + num_layers * growth_rate
             if i != len(block_config) - 1:
-                trans = _Transition(num_input_features=num_features,
-                                    num_output_features=num_features // 2)
-                self.features.add_module('transition%d' % (i + 1), trans)
+                trans = _Transition(
+                    num_input_features=num_features, num_output_features=num_features // 2
+                )
+                self.features.add_module("transition%d" % (i + 1), trans)
                 num_features = num_features // 2
 
         # Final batch norm
-        self.features.add_module('norm5', nn.BatchNorm2d(num_features))
+        self.features.add_module("norm5", nn.BatchNorm2d(num_features))
 
         # Linear layer
-        self.classifier = nn.Linear(num_features,num_classes)
+        self.classifier = nn.Linear(num_features, num_classes)
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight)

@@ -20,7 +20,9 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-__all__ = ['pyramidnet272', 'pyramidnet164']
+from .batchensemble import Ensemble_Conv2d, Ensemble_FC, Ensemble_orderFC
+
+__all__ = ["pyramidnet272", "pyramidnet164"]
 
 _inplace_flag = False
 
@@ -38,7 +40,6 @@ You can remove this warning by cloning the output of the custom Function.
 
 
 class ShakeDropFunction(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, x, training=True, p_drop=0.5, alpha_range=[-1, 1]):
         if training:
@@ -66,7 +67,6 @@ class ShakeDropFunction(torch.autograd.Function):
 
 
 class ShakeDrop(nn.Module):
-
     def __init__(self, p_drop=0.5, alpha_range=[-1, 1]):
         super(ShakeDrop, self).__init__()
         self.p_drop = p_drop
@@ -76,22 +76,43 @@ class ShakeDrop(nn.Module):
         return ShakeDropFunction.apply(x, self.training, self.p_drop, self.alpha_range)
 
 
-def conv3x3(in_planes, out_planes, stride=1):
+def conv3x3(in_planes, out_planes, stride=1, num_model=-1):
     """
-	3x3 convolution with padding
-	"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+    3x3 convolution with padding
+    """
+    return (
+        nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        if num_model <= 0
+        else Ensemble_Conv2d(
+            in_planes,
+            out_planes,
+            kernel_size=3,
+            stride=stride,
+            padding=1.0,
+            bias=False,
+            num_models=num_model,
+        )
+    )
 
 
 class BasicBlock(nn.Module):
     outchannel_ratio = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, p_shakedrop=1.0):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, p_shakedrop=1.0, num_model=-1):
         super(BasicBlock, self).__init__()
+        self.num_model = num_model
         self.bn1 = nn.BatchNorm2d(inplanes)
-        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.conv1 = (
+            conv3x3(inplanes, planes, stride)
+            if self.num_model <= 0
+            else conv3x3(inplanes, planes, stride, num_model)
+        )
         self.bn2 = nn.BatchNorm2d(planes)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv2 = (
+            conv3x3(planes, planes)
+            if self.num_model <= 0
+            else conv3x3(inplanes, planes, 1, num_model)
+        )
         self.bn3 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=_inplace_flag)
         self.downsample = downsample
@@ -122,8 +143,13 @@ class BasicBlock(nn.Module):
 
         if residual_channel != shortcut_channel:
             padding = torch.autograd.Variable(
-                torch.FloatTensor(batch_size, residual_channel - shortcut_channel, featuremap_size[0],
-                                       featuremap_size[1]).fill_(0)).to(x.device)
+                torch.FloatTensor(
+                    batch_size,
+                    residual_channel - shortcut_channel,
+                    featuremap_size[0],
+                    featuremap_size[1],
+                ).fill_(0)
+            ).to(x.device)
             out += torch.cat((shortcut, padding), 1)
         else:
             out += shortcut
@@ -134,15 +160,41 @@ class BasicBlock(nn.Module):
 class Bottleneck(nn.Module):
     outchannel_ratio = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, p_shakedrop=1.0):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, p_shakedrop=1.0, num_model=-1):
         super(Bottleneck, self).__init__()
         self.bn1 = nn.BatchNorm2d(inplanes)
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+        self.num_model = num_model
+        self.conv1 = (
+            nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+            if self.num_model <= 0
+            else Ensemble_Conv2d(inplanes, planes, kernel_size=1, bias=False, num_models=num_model)
+        )
         self.bn2 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, (planes * 1), kernel_size=3, stride=stride,
-                               padding=1, bias=False)
+        self.conv2 = (
+            nn.Conv2d(planes, (planes * 1), kernel_size=3, stride=stride, padding=1, bias=False)
+            if self.num_model <= 0
+            else Ensemble_Conv2d(
+                planes,
+                (planes * 1),
+                kernel_size=3,
+                stride=stride,
+                padding=1,
+                bias=False,
+                num_models=num_model,
+            )
+        )
         self.bn3 = nn.BatchNorm2d((planes * 1))
-        self.conv3 = nn.Conv2d((planes * 1), planes * Bottleneck.outchannel_ratio, kernel_size=1, bias=False)
+        self.conv3 = (
+            nn.Conv2d((planes * 1), planes * Bottleneck.outchannel_ratio, kernel_size=1, bias=False)
+            if self.num_model <= 0
+            else Ensemble_Conv2d(
+                (planes * 1),
+                planes * Bottleneck.outchannel_ratio,
+                kernel_size=1,
+                bias=False,
+                num_models=num_model,
+            )
+        )
         self.bn4 = nn.BatchNorm2d(planes * Bottleneck.outchannel_ratio)
         self.relu = nn.ReLU(inplace=_inplace_flag)
         self.downsample = downsample
@@ -179,26 +231,31 @@ class Bottleneck(nn.Module):
 
         if residual_channel != shortcut_channel:
             padding = torch.autograd.Variable(
-                torch.FloatTensor(batch_size, residual_channel - shortcut_channel, featuremap_size[0],
-                                       featuremap_size[1]).fill_(0)).to(x.device)
-            # for summary parameters and FLOPs
-            # padding = torch.autograd.Variable(
-            #			torch.zeros(batch_size, residual_channel - shortcut_channel, featuremap_size[0],
-            #							featuremap_size[1]).type_as(shortcut))
-            out = out+torch.cat((shortcut, padding), 1)
+                torch.FloatTensor(
+                    batch_size,
+                    residual_channel - shortcut_channel,
+                    featuremap_size[0],
+                    featuremap_size[1],
+                ).fill_(0)
+            ).to(x.device)
+            out = out + torch.cat((shortcut, padding), 1)
         else:
-            out = out+shortcut
+            out = out + shortcut
 
         return out
 
 
 class PyramidNet(nn.Module):
-    def __init__(self, dataset='cifar10',
-                 bottleneck=True,
-                 depth=272,
-                 alpha=200,
-                 num_classes=10,
-                 split_factor=1):
+    def __init__(
+        self,
+        dataset="cifar10",
+        bottleneck=True,
+        depth=272,
+        alpha=200,
+        num_classes=10,
+        split_factor=1,
+        num_models=-1,
+    ):
         super(PyramidNet, self).__init__()
         """
 		inplanes_dict = {'imagenet': {1: 64, 2: 44, 4: 32, 8: 24},
@@ -207,9 +264,9 @@ class PyramidNet(nn.Module):
 							'svhn': {1: 16, 2: 12, 4: 8, 8: 6, 16: 4},
 						}
 		"""
-
+        self.num_models = num_models
         self.dataset = dataset
-        if self.dataset in ['cifar10', 'cifar100', 'svhn']:
+        if self.dataset in ["cifar10", "cifar100", "svhn"]:
             # self.inplanes = inplanes_dict[dataset][split_factor]
             self.inplanes = 16
 
@@ -223,39 +280,72 @@ class PyramidNet(nn.Module):
             # self.addrate = alpha / (3 * n * 1.0)
             self.addrate = alpha / (3 * n * (split_factor ** 0.5))
             self.final_shake_p = 0.5 / (split_factor ** 0.5)
-            print('INFO:PyTorch: PyramidNet: The add rate is {}, '
-                  'the final shake p is {}'.format(self.addrate, self.final_shake_p))
+            print(
+                "INFO:PyTorch: PyramidNet: The add rate is {}, "
+                "the final shake p is {}".format(self.addrate, self.final_shake_p)
+            )
 
-            self.ps_shakedrop = [1. - (1.0 - (self.final_shake_p / (3 * n)) * (i + 1)) for i in range(3 * n)]
+            self.ps_shakedrop = [
+                1.0 - (1.0 - (self.final_shake_p / (3 * n)) * (i + 1)) for i in range(3 * n)
+            ]
 
             self.input_featuremap_dim = self.inplanes
-            self.conv1 = nn.Conv2d(3, self.input_featuremap_dim, kernel_size=7, stride=2, padding=3, bias=False)
+            self.conv1 = (
+                nn.Conv2d(
+                    3, self.input_featuremap_dim, kernel_size=7, stride=2, padding=3, bias=False
+                )
+                if self.num_models <= 0
+                else Ensemble_Conv2d(
+                    3,
+                    self.input_featuremap_dim,
+                    kernel_size=7,
+                    stride=2,
+                    padding=3,
+                    bias=False,
+                    num_models=num_models,
+                )
+            )
             self.bn1 = nn.BatchNorm2d(self.input_featuremap_dim)
             self.relu = nn.ReLU(inplace=_inplace_flag)
             self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
             self.featuremap_dim = self.input_featuremap_dim
-            self.layer1 = self.pyramidal_make_layer(block, n)
-            self.layer2 = self.pyramidal_make_layer(block, n, stride=2)
-            self.layer3 = self.pyramidal_make_layer(block, n, stride=2)
+            self.layer1 = self.pyramidal_make_layer(block, n, stride=1, ensemble=False)
+            self.layer2 = self.pyramidal_make_layer(block, n, stride=2, ensemble=False)
+            self.layer3 = self.pyramidal_make_layer(block, n, stride=2, ensemble=True)
 
             self.final_featuremap_dim = self.input_featuremap_dim
             self.bn_final = nn.BatchNorm2d(self.final_featuremap_dim)
             self.relu_final = nn.ReLU(inplace=_inplace_flag)
             # self.avgpool = nn.AvgPool2d(8)
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-            self.fc = nn.Linear(self.final_featuremap_dim, num_classes)
+            self.fc = (
+                nn.Linear(self.final_featuremap_dim, num_classes)
+                if self.num_models <= 0
+                else Ensemble_orderFC(
+                    self.final_featuremap_dim, num_classes, num_models=self.num_models
+                )
+            )
 
-        elif dataset == 'imagenet':
+        elif dataset == "imagenet":
             raise NotImplementedError
 
-            blocks = {18: BasicBlock, 34: BasicBlock, 50: Bottleneck, 101: Bottleneck, 152: Bottleneck, 200: Bottleneck}
-            layers = {18: [2, 2, 2, 2],
-                      34: [3, 4, 6, 3],
-                      50: [3, 4, 6, 3],
-                      101: [3, 4, 23, 3],
-                      152: [3, 8, 36, 3],
-                      200: [3, 24, 36, 3]}
+            blocks = {
+                18: BasicBlock,
+                34: BasicBlock,
+                50: Bottleneck,
+                101: Bottleneck,
+                152: Bottleneck,
+                200: Bottleneck,
+            }
+            layers = {
+                18: [2, 2, 2, 2],
+                34: [3, 4, 6, 3],
+                50: [3, 4, 6, 3],
+                101: [3, 4, 23, 3],
+                152: [3, 8, 36, 3],
+                200: [3, 24, 36, 3],
+            }
 
             if layers.get(depth) is None:
                 if bottleneck is True:
@@ -266,29 +356,57 @@ class PyramidNet(nn.Module):
                     temp_cfg = int((depth - 2) / 8)
 
                 layers[depth] = [temp_cfg, temp_cfg, temp_cfg, temp_cfg]
-                print('=> the layer configuration for each stage is set to', layers[depth])
+                print("=> the layer configuration for each stage is set to", layers[depth])
 
             self.inplanes = 64
             self.addrate = alpha / (sum(layers[depth]) * 1.0)
 
             self.input_featuremap_dim = self.inplanes
-            self.conv1 = nn.Conv2d(3, self.input_featuremap_dim, kernel_size=7, stride=2, padding=3, bias=False)
+            self.conv1 = (
+                nn.Conv2d(
+                    3, self.input_featuremap_dim, kernel_size=7, stride=2, padding=3, bias=False
+                )
+                if self.num_models <= 0
+                else Ensemble_Conv2d(
+                    3,
+                    self.input_featuremap_dim,
+                    kernel_size=7,
+                    stride=2,
+                    padding=3,
+                    bias=False,
+                    num_models=num_models,
+                )
+            )
             self.bn1 = nn.BatchNorm2d(self.input_featuremap_dim)
             self.relu = nn.ReLU(inplace=_inplace_flag)
             self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
             self.featuremap_dim = self.input_featuremap_dim
-            self.layer1 = self.pyramidal_make_layer(blocks[depth], layers[depth][0])
-            self.layer2 = self.pyramidal_make_layer(blocks[depth], layers[depth][1], stride=2)
-            self.layer3 = self.pyramidal_make_layer(blocks[depth], layers[depth][2], stride=2)
-            self.layer4 = self.pyramidal_make_layer(blocks[depth], layers[depth][3], stride=2)
+            self.layer1 = self.pyramidal_make_layer(
+                blocks[depth], layers[depth][0], stride=1, ensemble=False
+            )
+            self.layer2 = self.pyramidal_make_layer(
+                blocks[depth], layers[depth][1], stride=2, ensemble=False
+            )
+            self.layer3 = self.pyramidal_make_layer(
+                blocks[depth], layers[depth][2], stride=2, ensemble=False
+            )
+            self.layer4 = self.pyramidal_make_layer(
+                blocks[depth], layers[depth][3], stride=2, ensemble=False
+            )
 
             self.final_featuremap_dim = self.input_featuremap_dim
             self.bn_final = nn.BatchNorm2d(self.final_featuremap_dim)
             self.relu_final = nn.ReLU(inplace=_inplace_flag)
             # self.avgpool = nn.AvgPool2d(7)
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-            self.fc = nn.Linear(self.final_featuremap_dim, num_classes)
+            self.fc = (
+                nn.Linear(self.final_featuremap_dim, num_classes)
+                if self.num_models <= 0
+                else Ensemble_orderFC(
+                    self.final_featuremap_dim, num_classes, num_models=self.num_models
+                )
+            )
 
         else:
             raise NotImplementedError
@@ -296,50 +414,64 @@ class PyramidNet(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                m.weight.data.normal_(0, math.sqrt(2.0 / n))
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
         assert len(self.ps_shakedrop) == 0, self.ps_shakedrop
 
-    def pyramidal_make_layer(self, block, block_depth, stride=1):
+    def pyramidal_make_layer(self, block, block_depth, stride=1, ensemble=False):
         downsample = None
-        if stride != 1:  # or self.inplanes != int(round(featuremap_dim_1st)) * block.outchannel_ratio:
+        if (
+            stride != 1
+        ):  # or self.inplanes != int(round(featuremap_dim_1st)) * block.outchannel_ratio:
             downsample = nn.AvgPool2d((2, 2), stride=(2, 2), ceil_mode=True)
 
         layers = []
         self.featuremap_dim = self.featuremap_dim + self.addrate
-        layers.append(block(self.input_featuremap_dim, int(round(self.featuremap_dim)), stride, downsample,
-                            p_shakedrop=self.ps_shakedrop.pop(0)))
+        layers.append(
+            block(
+                self.input_featuremap_dim,
+                int(round(self.featuremap_dim)),
+                stride,
+                downsample,
+                p_shakedrop=self.ps_shakedrop.pop(0),
+                num_model=self.num_models if ensemble else -1,
+            )
+        )
         for i in range(1, block_depth):
             temp_featuremap_dim = self.featuremap_dim + self.addrate
             layers.append(
-                block(int(round(self.featuremap_dim)) * block.outchannel_ratio, int(round(temp_featuremap_dim)), 1,
-                      p_shakedrop=self.ps_shakedrop.pop(0)))
+                block(
+                    int(round(self.featuremap_dim)) * block.outchannel_ratio,
+                    int(round(temp_featuremap_dim)),
+                    1,
+                    p_shakedrop=self.ps_shakedrop.pop(0),
+                    num_model=-1 if stride == 1 else self.num_models,
+                )
+            )
             self.featuremap_dim = temp_featuremap_dim
         self.input_featuremap_dim = int(round(self.featuremap_dim)) * block.outchannel_ratio
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        if self.dataset == 'cifar10' or self.dataset == 'cifar100':
+        if self.dataset == "cifar10" or self.dataset == "cifar100":
             x = self.conv1(x)
             x = self.bn1(x)
             x = self.relu(x)
-            x= self.maxpool(x)
-
+            x = self.maxpool(x)
             x = self.layer1(x)
             x = self.layer2(x)
             x = self.layer3(x)
-
             x = self.bn_final(x)
             x = self.relu_final(x)
             x = self.avgpool(x)
             x = x.view(x.size(0), -1)
             x = self.fc(x)
 
-        elif self.dataset == 'imagenet':
+        elif self.dataset == "imagenet":
             x = self.conv1(x)
             x = self.bn1(x)
             x = self.relu(x)
@@ -359,11 +491,11 @@ class PyramidNet(nn.Module):
         return x
 
 
-def pyramidnet164(bottleneck=True, **kwargs):
+def pyramidnet164(bottleneck=True, num_models=-1, **kwargs):
     """PyramidNet164 for CIFAR and SVHN"""
-    return PyramidNet(bottleneck=bottleneck, depth=164, alpha=270, **kwargs)
+    return PyramidNet(bottleneck=bottleneck, depth=164, alpha=270, num_models=num_models, **kwargs)
 
 
-def pyramidnet272(bottleneck=True, **kwargs):
+def pyramidnet272(bottleneck=True, num_models=-1, **kwargs):
     """PyramidNet272 for CIFAR and SVHN"""
-    return PyramidNet(bottleneck=bottleneck, depth=272, alpha=200, **kwargs)
+    return PyramidNet(bottleneck=bottleneck, depth=272, alpha=200, num_models=num_models, **kwargs)

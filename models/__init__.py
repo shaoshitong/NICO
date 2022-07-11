@@ -1,5 +1,5 @@
+from .ConvNext import *
 from .DenseNet import *
-from.ConvNext import *
 from .DPN import *
 from .efficientnet import *
 from .presenet import *

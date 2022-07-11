@@ -1,20 +1,24 @@
-from torchvision.models import DenseNet
-import torch
-import torchvision
-import re
+from collections import OrderedDict
+from typing import List, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as cp
-from collections import OrderedDict
-from torchvision.models.densenet import _Transition
+import torchvision
 from torch import Tensor
-from typing import Any, List, Tuple
+from torchvision.models import DenseNet
+from torchvision.models.densenet import _Transition
 
 
 class _DenseLayer(nn.Module):
     def __init__(
-        self, num_input_features: int, growth_rate: int, bn_size: int, drop_rate: float, memory_efficient: bool = False
+        self,
+        num_input_features: int,
+        growth_rate: int,
+        bn_size: int,
+        drop_rate: float,
+        memory_efficient: bool = False,
     ) -> None:
         super().__init__()
         self.norm1: nn.BatchNorm2d
@@ -23,7 +27,10 @@ class _DenseLayer(nn.Module):
         self.add_module("relu1", nn.ReLU(inplace=True))
         self.conv1: nn.Conv2d
         self.add_module(
-            "conv1", nn.Conv2d(num_input_features, bn_size * growth_rate, kernel_size=1, stride=1, bias=False)
+            "conv1",
+            nn.Conv2d(
+                num_input_features, bn_size * growth_rate, kernel_size=1, stride=1, bias=False
+            ),
         )
         self.norm2: nn.BatchNorm2d
         self.add_module("norm2", nn.BatchNorm2d(bn_size * growth_rate))
@@ -31,7 +38,16 @@ class _DenseLayer(nn.Module):
         self.add_module("relu2", nn.ReLU(inplace=True))
         self.conv2: nn.Conv2d
         self.add_module(
-            "conv2", nn.Conv2d(bn_size * growth_rate, growth_rate, kernel_size=7, stride=1, padding=3, bias=False,groups=growth_rate)
+            "conv2",
+            nn.Conv2d(
+                bn_size * growth_rate,
+                growth_rate,
+                kernel_size=7,
+                stride=1,
+                padding=3,
+                bias=False,
+                groups=growth_rate,
+            ),
         )
         self.drop_rate = float(drop_rate)
         self.memory_efficient = memory_efficient
@@ -116,9 +132,7 @@ class _DenseBlock(nn.ModuleDict):
         return torch.cat(features, 1)
 
 
-
 class PWDenseNetV2(torchvision.models.DenseNet):
-
     def __init__(
         self,
         growth_rate: int = 40,
@@ -127,25 +141,40 @@ class PWDenseNetV2(torchvision.models.DenseNet):
         bn_size: int = 1,
         drop_rate: float = 0,
         num_classes: int = 10,
-        memory_efficient: bool = False
+        memory_efficient: bool = False,
     ) -> None:
 
-        super(PWDenseNetV2, self).__init__(growth_rate,
-                                               block_config,
-                                               num_init_features,
-                                               bn_size,
-                                               drop_rate,
-                                               num_classes,
-                                               memory_efficient)
+        super(PWDenseNetV2, self).__init__(
+            growth_rate,
+            block_config,
+            num_init_features,
+            bn_size,
+            drop_rate,
+            num_classes,
+            memory_efficient,
+        )
 
         # First convolution
-        self.features = nn.Sequential(OrderedDict([
-                ('conv0', nn.Conv2d(3, num_init_features, kernel_size=(7, 7), stride=(2, 2),
-                                    padding=(3, 3), bias=False)),
-                ('norm0', nn.BatchNorm2d(num_init_features)),
-                ('relu0', nn.SiLU(inplace=True)),
-                ('pool0', nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))),
-            ]))
+        self.features = nn.Sequential(
+            OrderedDict(
+                [
+                    (
+                        "conv0",
+                        nn.Conv2d(
+                            3,
+                            num_init_features,
+                            kernel_size=(7, 7),
+                            stride=(2, 2),
+                            padding=(3, 3),
+                            bias=False,
+                        ),
+                    ),
+                    ("norm0", nn.BatchNorm2d(num_init_features)),
+                    ("relu0", nn.SiLU(inplace=True)),
+                    ("pool0", nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))),
+                ]
+            )
+        )
         # Each denseblock
         num_features = num_init_features
         for i, num_layers in enumerate(block_config):
@@ -155,21 +184,22 @@ class PWDenseNetV2(torchvision.models.DenseNet):
                 bn_size=bn_size,
                 growth_rate=growth_rate,
                 drop_rate=drop_rate,
-                memory_efficient=memory_efficient
+                memory_efficient=memory_efficient,
             )
-            self.features.add_module('denseblock%d' % (i + 1), block)
+            self.features.add_module("denseblock%d" % (i + 1), block)
             num_features = num_features + num_layers * growth_rate
             if i != len(block_config) - 1:
-                trans = _Transition(num_input_features=num_features,
-                                    num_output_features=num_features // 2)
-                self.features.add_module('transition%d' % (i + 1), trans)
+                trans = _Transition(
+                    num_input_features=num_features, num_output_features=num_features // 2
+                )
+                self.features.add_module("transition%d" % (i + 1), trans)
                 num_features = num_features // 2
 
         # Final batch norm
-        self.features.add_module('norm5', nn.BatchNorm2d(num_features))
+        self.features.add_module("norm5", nn.BatchNorm2d(num_features))
 
         # Linear layer
-        self.classifier = nn.Linear(num_features,num_classes)
+        self.classifier = nn.Linear(num_features, num_classes)
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight)

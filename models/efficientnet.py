@@ -5,11 +5,12 @@ EfficientNetV2: Smaller Models and Faster Training
 arXiv preprint arXiv:2104.00298.
 import from https://github.com/d-li14/mobilenetv2.pytorch
 """
-import torch
-import torch.nn as nn
 import math
 
-__all__ = ['effnetv2_s', 'effnetv2_m', 'effnetv2_l', 'effnetv2_xl']
+import torch
+import torch.nn as nn
+
+__all__ = ["effnetv2_s", "effnetv2_m", "effnetv2_l", "effnetv2_xl"]
 
 
 def _make_divisible(v, divisor, min_value=None):
@@ -33,7 +34,7 @@ def _make_divisible(v, divisor, min_value=None):
 
 
 # SiLU (Swish) activation function
-if hasattr(nn, 'SiLU'):
+if hasattr(nn, "SiLU"):
     SiLU = nn.SiLU
 else:
     # For compatibility with old PyTorch versions
@@ -50,7 +51,7 @@ class SELayer(nn.Module):
             nn.Linear(oup, _make_divisible(inp // reduction, 8)),
             SiLU(),
             nn.Linear(_make_divisible(inp // reduction, 8), oup),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -61,19 +62,11 @@ class SELayer(nn.Module):
 
 
 def conv_3x3_bn(inp, oup, stride):
-    return nn.Sequential(
-        nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
-        nn.BatchNorm2d(oup),
-        SiLU()
-    )
+    return nn.Sequential(nn.Conv2d(inp, oup, 3, stride, 1, bias=False), nn.BatchNorm2d(oup), SiLU())
 
 
 def conv_1x1_bn(inp, oup):
-    return nn.Sequential(
-        nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
-        nn.BatchNorm2d(oup),
-        SiLU()
-    )
+    return nn.Sequential(nn.Conv2d(inp, oup, 1, 1, 0, bias=False), nn.BatchNorm2d(oup), SiLU())
 
 
 class MBConv(nn.Module):
@@ -117,7 +110,7 @@ class MBConv(nn.Module):
 
 
 class EffNetV2(nn.Module):
-    def __init__(self, cfgs, num_classes=1000, width_mult=1.):
+    def __init__(self, cfgs, num_classes=1000, width_mult=1.0):
         super(EffNetV2, self).__init__()
         self.cfgs = cfgs
 
@@ -152,7 +145,7 @@ class EffNetV2(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                m.weight.data.normal_(0, math.sqrt(2.0 / n))
                 if m.bias is not None:
                     m.bias.data.zero_()
             elif isinstance(m, nn.BatchNorm2d):
@@ -228,4 +221,3 @@ def effnetv2_xl(**kwargs):
         [6, 640, 8, 1, 1],
     ]
     return EffNetV2(cfgs, **kwargs)
-
