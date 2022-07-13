@@ -2,23 +2,21 @@ import random
 
 import numpy as np
 import torch
-import torch.nn as nn
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets, transforms
-
-from .dataUtils import *
-
+from torchvision import transforms
+from .utils import *
 
 class DGDataSet(Dataset):
     def __init__(
         self,
         mode="train",
-        valid_category=None,
         label2id_path="/home/sst/dataset/nico/dg_label_id_mapping.json",
         test_image_path=None,
         train_image_path="/home/sst/dataset/nico/nico/train/",
         transform_type=None,
+        cutmix_in_cpu=True,
+        img_size=224,
     ):
         """
         :param mode:  train? valid? test?
@@ -33,17 +31,15 @@ class DGDataSet(Dataset):
         self.id2label = reverse_dic(self.label2id)
         self.train_image_path = train_image_path
         self.test_image_path = test_image_path
+        self.cutmix_in_cpu=cutmix_in_cpu
         self.nums = 10
         self.beta = 0.3
         self.transform = transforms.Compose(
             [
-                # add transforms here
-                transforms.RandomResizedCrop((224, 224), scale=(0.75, 1.0)),
+                transforms.RandomResizedCrop((img_size,img_size), scale=(0.75, 1.0)),
                 transforms.RandomHorizontalFlip(0.5),
                 transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
                 transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
-                # transforms.RandomRotation(15),
-                # transforms.RandomGrayscale(p=0.1),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
@@ -51,14 +47,12 @@ class DGDataSet(Dataset):
 
         self.test_transform = transforms.Compose(
             [
-                transforms.Resize((224, 224)),
+                transforms.Resize((img_size,img_size)),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
         )
 
-        # if train or valid, synthesize a dic contain num_images * dic, each subdic contain:
-        # path、category_id、context_category
 
     def synthesize_images_track1(self):
         self.images = {}
@@ -72,6 +66,8 @@ class DGDataSet(Dataset):
                     now_dic["category_id"] = self.label2id[category_name]
                     now_dic["context_category"] = context_category
                     self.images[len(self.images)] = now_dic
+                    if len(self.images)>200:
+                        return
 
     def synthesize_images_track2(self):
         self.images = {}
@@ -132,10 +128,15 @@ class DGDataSet(Dataset):
         if self.mode == "train" or self.mode == "valid":
             img_dic = self.images[item]
             img = Image.open(img_dic["path"]).convert("RGB")
-            img = self.YOCO(img) if 0.5 > random.random() else self.transform(img)
-            y = torch.zeros(60)
-            y[img_dic["category_id"]] = 1
-            img, y = self.cutmix_and_yoco(img, y, item)
+            if self.cutmix_in_cpu:
+                img = self.YOCO(img) if 0.5 > random.random() else self.transform(img)
+                y = torch.zeros(60)
+                y[img_dic["category_id"]] = 1
+            else:
+                img = self.transform(img)
+                y = img_dic['category_id']
+            if self.cutmix_in_cpu:
+                img, y = self.cutmix_and_yoco(img, y, item)
             return img, y
 
     def get_id2label(self):
@@ -151,9 +152,11 @@ class Track1DataSet(DGDataSet):
         test_image_path=None,
         train_image_path="/home/sst/dataset/nico/nico/train/",
         transform_type=None,
+        cutmix_in_cpu=True,
+        img_size=224,
     ):
         super(Track1DataSet, self).__init__(
-            mode, valid_category, label2id_path, test_image_path, train_image_path, transform_type
+            mode, label2id_path, test_image_path, train_image_path, transform_type,cutmix_in_cpu,img_size
         )
         if mode == "test":
             self.images = get_test_set_images(test_image_path)
@@ -168,90 +171,54 @@ class Track1DataSet(DGDataSet):
             self.synthesize_images_track1()
 
 
-class Track2DataSet(DGDataSet):
-    def __init__(
-        self,
-        mode="train",
-        valid_category=None,
-        label2id_path="/home/sst/dataset/nico/dg_label_id_mapping.json",
-        test_image_path=None,
-        train_image_path="/home/sst/dataset/nico/nico/train/",
-        transform_type=None,
-    ):
-        super(Track2DataSet, self).__init__(
-            mode, valid_category, label2id_path, test_image_path, train_image_path, transform_type
-        )
-        if mode == "test":
-            self.images = get_test_set_images(test_image_path)
-        if mode == "train":
-            self.total_dic = get_train_set_dic_track2(train_image_path)
-            self.synthesize_images_track2()
-
-
-def get_loader(
+def get_train_loader(
     train_image_path,
-    valid_image_path,
     label2id_path,
     batch_size=32,
-    valid_category="autumn",
     num_workers=8,
     track_mode="track1",
+    cutmix_in_cpu=True,
+    img_size=224,
 ):
-    """
-    if you are familiar with me, you will know this function aims to get train loader and valid loader
-    :return:
-    """
-    context_category_list = ["autumn", "dim", "grass", "outdoor", "rock", "water"]
     track_list = ["track1", "track2"]
     assert track_mode in track_list, "track_mode should be one of track1 and track2"
-    if valid_category == "rand":
-        valid_category = context_category_list[random.randint(0, len(context_category_list) - 1)]
     if track_mode == "track2":
-        valid_category = None
-        print("track2 not supports valid mode")
-    print(f"we choose {valid_category} as valid, others as train")
-    print("-" * 100)
-    MyDataSet = Track1DataSet if track_mode == "track1" else Track2DataSet
+        raise NotImplementedError("Not supposed track2 dataset")
+    MyDataSet = Track1DataSet if track_mode == "track1" else None
     train_set = MyDataSet(
         mode="train",
         train_image_path=train_image_path,
         label2id_path=label2id_path,
-        valid_category=valid_category,
+        cutmix_in_cpu=cutmix_in_cpu,
+        img_size=img_size
     )
     train_loader = DataLoader(
         train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
-    if valid_category is None:
-        return train_loader
-    valid_set = MyDataSet(
-        mode="valid",
-        valid_category=valid_category,
-        train_image_path=valid_image_path,
-        label2id_path=label2id_path,
-    )
-    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=True)
-
-    print("managed to get loader!!!!!")
-    print("-" * 100)
-    return train_loader, valid_loader
+    return train_loader
 
 
 def get_test_loader(
-    batch_size=32,
-    test_image_path="./public_dg_0416/public_test_flat/",
-    label2id_path="./dg_label_id_mapping.json",
+    batch_size,
+    test_image_path,
+    label2id_path,
     transforms=None,
     track_mode="track1",
+    cutmix_in_cpu=True,
+    img_size=224,
 ):
     track_list = ["track1", "track2"]
     assert track_mode in track_list, "track_mode should be one of track1 and track2"
-    MyDataSet = Track1DataSet if track_mode == "track1" else Track2DataSet
-
+    if track_mode == "track2":
+        raise NotImplementedError("Not supposed track2 dataset")
+    MyDataSet = Track1DataSet if track_mode == "track1" else None
     test_set = MyDataSet(
         mode="test",
         test_image_path=test_image_path,
         label2id_path=label2id_path,
         transform_type=transforms,
+        cutmix_in_cpu=cutmix_in_cpu,
+        img_size=img_size,
     )
-    loader = DataLoader(test_set, batch_size=batch_size, shuffle=True)
+    loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
     return loader, test_set.get_id2label()
