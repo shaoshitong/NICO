@@ -24,4 +24,4 @@ python total_train.py --fp16 --parallel --cuda_devices '0,1,2,3,4,5,6,7' --train
 mv <you pretrain ckpt file> resume.pth
 python train.py --test --if_resume --train_image_path \
 <you training dataset path> --label2id_path <you json path> --test_image_path <you test dataset path>
-```
+``` 
