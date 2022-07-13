@@ -1,11 +1,6 @@
-from .data import get_train_loader,get_test_loader
-from .utils import write_result
 from .cutmix import cutmix
+from .data import get_test_loader, get_train_loader
 from .mixup import mixup
-__all__=[
-    'get_train_loader',
-    'get_test_loader',
-    'write_result',
-    'cutmix',
-    'mixup'
-]
+from .utils import write_result
+
+__all__ = ["get_train_loader", "get_test_loader", "write_result", "cutmix", "mixup"]

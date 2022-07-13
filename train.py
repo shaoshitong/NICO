@@ -1,4 +1,5 @@
 import os
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -8,7 +9,7 @@ import torch.utils.data.distributed
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 
-from data import get_train_loader, get_test_loader, write_result, cutmix, mixup
+from data import cutmix, get_test_loader, get_train_loader, mixup, write_result
 from models import pyramidnet272
 from utils import EMA, SWA
 
@@ -18,9 +19,7 @@ class KDLoss(nn.KLDivLoss):
     "Distilling the Knowledge in a Neural Network"
     """
 
-    def __init__(
-            self, temperature=5, alpha=1, beta=0.2, reduction="batchmean", **kwargs
-    ):
+    def __init__(self, temperature=5, alpha=1, beta=0.2, reduction="batchmean", **kwargs):
         super().__init__(reduction=reduction)
         self.temperature = temperature
         self.alpha = alpha
@@ -37,24 +36,24 @@ class KDLoss(nn.KLDivLoss):
 
 class NoisyStudent:
     def __init__(
-            self,
-            gpu,
-            train_image_path: str = "/home/Bigdata/NICO/nico/train/",
-            label2id_path: str = "/home/Bigdata/NICO/dg_label_id_mapping.json",
-            test_image_path: str = "/home/Bigdata/NICO/nico/test/",
-            batch_size: int = 64,
-            lr: float = 1e-3,
-            weight_decay: float = 1e-4,
-            warmup_epoch=10,
-            track_mode="track1",
-            kd=False,
-            teacher_ckpt_path="./teacher.pth",
-            student_ckpt_path='./student.pth',
-            original_ckpt_path='./original.pth',
-            ensemble=False,
-            img_size=224,
-            cutmix_in_cpu=False,
-            if_finetune=False,
+        self,
+        gpu,
+        train_image_path: str = "/home/Bigdata/NICO/nico/train/",
+        label2id_path: str = "/home/Bigdata/NICO/dg_label_id_mapping.json",
+        test_image_path: str = "/home/Bigdata/NICO/nico/test/",
+        batch_size: int = 64,
+        lr: float = 1e-3,
+        weight_decay: float = 1e-4,
+        warmup_epoch=10,
+        track_mode="track1",
+        kd=False,
+        teacher_ckpt_path="./teacher.pth",
+        student_ckpt_path="./student.pth",
+        original_ckpt_path="./original.pth",
+        ensemble=False,
+        img_size=224,
+        cutmix_in_cpu=False,
+        if_finetune=False,
     ):
         self.result = {}
         train_image_path: str = train_image_path
@@ -66,7 +65,7 @@ class NoisyStudent:
             label2id_path=label2id_path,
             track_mode=track_mode,
             img_size=img_size,
-            cutmix_in_cpu=cutmix_in_cpu
+            cutmix_in_cpu=cutmix_in_cpu,
         )
         self.test_loader_predict, _ = get_test_loader(
             batch_size=batch_size,
@@ -74,14 +73,14 @@ class NoisyStudent:
             label2id_path=label2id_path,
             test_image_path=test_image_path,
             img_size=img_size,
-            cutmix_in_cpu=cutmix_in_cpu
+            cutmix_in_cpu=cutmix_in_cpu,
         )
         self.test_loader_student, self.label2id = get_test_loader(
             batch_size=batch_size,
             transforms="train",
             label2id_path=label2id_path,
             test_image_path=test_image_path,
-            cutmix_in_cpu=cutmix_in_cpu
+            cutmix_in_cpu=cutmix_in_cpu,
         )
         self.gpu = gpu
         self.warmup_epoch = warmup_epoch
@@ -94,7 +93,9 @@ class NoisyStudent:
         self.original_ckpt_path = original_ckpt_path
         self.model = pyramidnet272(num_classes=60, num_models=2 if ensemble else -1).cuda(self.gpu)
         if if_finetune:
-            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(), lr=lr, weight_decay=weight_decay
+            )
         else:
             self.optimizer = torch.optim.SGD(
                 self.model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9
@@ -143,27 +144,28 @@ class NoisyStudent:
         return torch.tensor(y).cuda(self.gpu)
 
     def train(
-            self,
-            total_epoch,
-            accumulate_step=1,
-            decay_rate=0.9,
-            fp16=True,
-            if_resmue=False,
+        self,
+        total_epoch,
+        accumulate_step=1,
+        decay_rate=0.9,
+        fp16=True,
+        if_resmue=False,
     ):
         from torch.cuda.amp import GradScaler, autocast
+
         scaler = GradScaler()
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         start_epoch = 0
         myiter = 0
-        min_lr=min(self.lr*0.001,0.0001)
+        min_lr = min(self.lr * 0.001, 0.0001)
         if if_resmue:
-            model_state_dict=torch.load("resume.pth")['model']
+            model_state_dict = torch.load("resume.pth")["model"]
             self.model.load_state_dict(model_state_dict)
             print("successfully load 224x224 model's ckpt file")
         for epoch in range(start_epoch, total_epoch + 1):
-            if self.optimizer.param_groups[0]['lr'] < min_lr and epoch > self.warmup_epoch + 1:
+            if self.optimizer.param_groups[0]["lr"] < min_lr and epoch > self.warmup_epoch + 1:
                 break
             self.model.train()
             self.warm_up(epoch, now_loss=train_loss, prev_loss=prev_loss, decay_rate=decay_rate)
@@ -256,13 +258,13 @@ class NoisyStudent:
 
     def warm_up(self, epoch, now_loss=None, prev_loss=None, decay_rate=0.9):
         if epoch <= self.warmup_epoch:
-            self.optimizer.param_groups[0]['lr'] = self.lr * epoch / self.warmup_epoch
+            self.optimizer.param_groups[0]["lr"] = self.lr * epoch / self.warmup_epoch
         elif now_loss is not None and prev_loss is not None:
             delta = prev_loss - now_loss
             if delta / now_loss < 0.02 and delta < 0.02:
-                self.optimizer.param_groups[0]['lr'] *= decay_rate
-        p_lr = self.optimizer.param_groups[0]['lr']
-        print(f'lr = {p_lr}')
+                self.optimizer.param_groups[0]["lr"] *= decay_rate
+        p_lr = self.optimizer.param_groups[0]["lr"]
+        print(f"lr = {p_lr}")
 
     @torch.no_grad()
     def TTA(self, total_epoch=100, aug_weight=0.5):
@@ -280,26 +282,26 @@ class NoisyStudent:
 
 
 def main_worker(
-        gpu,
-        ngpus_per_node,
-        batch_size,
-        lr,
-        kd,
-        total_epoch,
-        dist_url,
-        world_size,
-        ensemble,
-        warmup_epoch,
-        train_image_path,
-        label2id_path,
-        test_image_path,
-        img_size,
-        cutmix_in_cpu,
-        lr_decay_rate,
-        fp16,
-        if_finetune,
-        accumulate_step,
-        if_resume
+    gpu,
+    ngpus_per_node,
+    batch_size,
+    lr,
+    kd,
+    total_epoch,
+    dist_url,
+    world_size,
+    ensemble,
+    warmup_epoch,
+    train_image_path,
+    label2id_path,
+    test_image_path,
+    img_size,
+    cutmix_in_cpu,
+    lr_decay_rate,
+    fp16,
+    if_finetune,
+    accumulate_step,
+    if_resume,
 ):
     print("Use GPU: {} for training".format(gpu))
     rank = 0  # 单机
@@ -313,13 +315,18 @@ def main_worker(
     batch_size = int(batch_size / ngpus_per_node)
     print("sub batch size is", batch_size)
     x = NoisyStudent(
-        gpu=gpu, batch_size=batch_size, kd=kd, lr=lr, warmup_epoch=warmup_epoch, ensemble=ensemble,
+        gpu=gpu,
+        batch_size=batch_size,
+        kd=kd,
+        lr=lr,
+        warmup_epoch=warmup_epoch,
+        ensemble=ensemble,
         train_image_path=train_image_path,
         label2id_path=label2id_path,
         test_image_path=test_image_path,
         img_size=img_size,
         cutmix_in_cpu=cutmix_in_cpu,
-        if_finetune=if_finetune
+        if_finetune=if_finetune,
     )
     x.model = DDP(x.model, device_ids=[gpu], output_device=gpu)
     if kd:
@@ -332,7 +339,13 @@ def main_worker(
         num_workers=6 if batch_size % 6 == 0 else 4,
         pin_memory=True,
     )
-    x.train(total_epoch=total_epoch, decay_rate=lr_decay_rate, fp16=fp16, accumulate_step=accumulate_step,if_resmue=if_resume)
+    x.train(
+        total_epoch=total_epoch,
+        decay_rate=lr_decay_rate,
+        fp16=fp16,
+        accumulate_step=accumulate_step,
+        if_resmue=if_resume,
+    )
 
 
 if __name__ == "__main__":
@@ -343,20 +356,22 @@ if __name__ == "__main__":
     paser.add_argument("--warmup_epoch", default=10, type=int)
     paser.add_argument("--total_epoch", default=200, type=int)
     paser.add_argument("--lr", default=0.1, type=float)
-    paser.add_argument("--test", default=False, action='store_true')
-    paser.add_argument("--kd", default=False, action='store_true')
-    paser.add_argument("--parallel", default=False,action='store_true')
-    paser.add_argument("--ensemble", default=False, action='store_true')
-    paser.add_argument("--img_size", default=224,type=int)
-    paser.add_argument("--cuda_devices", default="0,1,2,3",type=str)
-    paser.add_argument("--cutmix_in_cpu", default=False, action='store_true')
-    paser.add_argument("--fp16", default=False, action='store_true')
+    paser.add_argument("--test", default=False, action="store_true")
+    paser.add_argument("--kd", default=False, action="store_true")
+    paser.add_argument("--parallel", default=False, action="store_true")
+    paser.add_argument("--ensemble", default=False, action="store_true")
+    paser.add_argument("--img_size", default=224, type=int)
+    paser.add_argument("--cuda_devices", default="0,1,2,3", type=str)
+    paser.add_argument("--cutmix_in_cpu", default=False, action="store_true")
+    paser.add_argument("--fp16", default=False, action="store_true")
     paser.add_argument("--lr_decay_rate", default=0.9, type=float)
     paser.add_argument("--accumulate_step", default=1, type=int)
-    paser.add_argument("--if_finetune", default=False,action='store_true')
-    paser.add_argument("--if_resume", default=False,action='store_true')
+    paser.add_argument("--if_finetune", default=False, action="store_true")
+    paser.add_argument("--if_resume", default=False, action="store_true")
     paser.add_argument("--train_image_path", default="/home/Bigdata/NICO/nico/train/", type=str)
-    paser.add_argument("--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str)
+    paser.add_argument(
+        "--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str
+    )
     paser.add_argument("--test_image_path", default="/home/Bigdata/NICO/nico/test/", type=str)
     args = paser.parse_args()
 
@@ -401,31 +416,46 @@ if __name__ == "__main__":
                 args.fp16,
                 args.if_finetune,
                 args.accumulate_step,
-                args.if_resume
+                args.if_resume,
             ),
         )
     else:
         if args.test:
             x = NoisyStudent(
-                gpu=0, batch_size=batch_size, kd=kd, lr=lr, warmup_epoch=args.warmup_epoch, ensemble=ensemble,
+                gpu=0,
+                batch_size=batch_size,
+                kd=kd,
+                lr=lr,
+                warmup_epoch=args.warmup_epoch,
+                ensemble=ensemble,
                 train_image_path=args.train_image_path,
                 label2id_path=args.label2id_path,
                 test_image_path=args.test_image_path,
                 img_size=args.img_size,
                 cutmix_in_cpu=args.cutmix_in_cpu,
-                if_finetune=args.if_finetune
+                if_finetune=args.if_finetune,
             )
             x.TTA()
             x.save_result()
         else:
             x = NoisyStudent(
-                gpu=0, batch_size=batch_size, kd=kd, lr=lr, warmup_epoch=args.warmup_epoch, ensemble=ensemble,
+                gpu=0,
+                batch_size=batch_size,
+                kd=kd,
+                lr=lr,
+                warmup_epoch=args.warmup_epoch,
+                ensemble=ensemble,
                 train_image_path=args.train_image_path,
                 label2id_path=args.label2id_path,
                 test_image_path=args.test_image_path,
                 img_size=args.img_size,
                 cutmix_in_cpu=args.cutmix_in_cpu,
-                if_finetune=args.if_finetune
+                if_finetune=args.if_finetune,
             )
-            x.train(total_epoch=total_epoch, decay_rate=args.lr_decay_rate, fp16=args.fp16,
-                    accumulate_step=args.accumulate_step,if_resmue=args.if_resume)
+            x.train(
+                total_epoch=total_epoch,
+                decay_rate=args.lr_decay_rate,
+                fp16=args.fp16,
+                accumulate_step=args.accumulate_step,
+                if_resmue=args.if_resume,
+            )

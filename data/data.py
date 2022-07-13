@@ -5,7 +5,9 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+
 from .utils import *
+
 
 class DGDataSet(Dataset):
     def __init__(
@@ -31,12 +33,12 @@ class DGDataSet(Dataset):
         self.id2label = reverse_dic(self.label2id)
         self.train_image_path = train_image_path
         self.test_image_path = test_image_path
-        self.cutmix_in_cpu=cutmix_in_cpu
+        self.cutmix_in_cpu = cutmix_in_cpu
         self.nums = 10
         self.beta = 0.3
         self.transform = transforms.Compose(
             [
-                transforms.RandomResizedCrop((img_size,img_size), scale=(0.75, 1.0)),
+                transforms.RandomResizedCrop((img_size, img_size), scale=(0.75, 1.0)),
                 transforms.RandomHorizontalFlip(0.5),
                 transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
                 transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
@@ -47,12 +49,11 @@ class DGDataSet(Dataset):
 
         self.test_transform = transforms.Compose(
             [
-                transforms.Resize((img_size,img_size)),
+                transforms.Resize((img_size, img_size)),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
         )
-
 
     def synthesize_images_track1(self):
         self.images = {}
@@ -66,7 +67,7 @@ class DGDataSet(Dataset):
                     now_dic["category_id"] = self.label2id[category_name]
                     now_dic["context_category"] = context_category
                     self.images[len(self.images)] = now_dic
-                    if len(self.images)>200:
+                    if len(self.images) > 200:
                         return
 
     def synthesize_images_track2(self):
@@ -134,7 +135,7 @@ class DGDataSet(Dataset):
                 y[img_dic["category_id"]] = 1
             else:
                 img = self.transform(img)
-                y = img_dic['category_id']
+                y = img_dic["category_id"]
             if self.cutmix_in_cpu:
                 img, y = self.cutmix_and_yoco(img, y, item)
             return img, y
@@ -156,7 +157,13 @@ class Track1DataSet(DGDataSet):
         img_size=224,
     ):
         super(Track1DataSet, self).__init__(
-            mode, label2id_path, test_image_path, train_image_path, transform_type,cutmix_in_cpu,img_size
+            mode,
+            label2id_path,
+            test_image_path,
+            train_image_path,
+            transform_type,
+            cutmix_in_cpu,
+            img_size,
         )
         if mode == "test":
             self.images = get_test_set_images(test_image_path)
@@ -190,7 +197,7 @@ def get_train_loader(
         train_image_path=train_image_path,
         label2id_path=label2id_path,
         cutmix_in_cpu=cutmix_in_cpu,
-        img_size=img_size
+        img_size=img_size,
     )
     train_loader = DataLoader(
         train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers

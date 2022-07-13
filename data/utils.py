@@ -5,11 +5,13 @@ import os
 def reverse_dic(dic):
     return dict([(v, k) for (k, v) in dic.items()])
 
+
 def get_label2id(file_name):
     with open(file_name) as file:
         dict = json.load(file)
 
     return dict
+
 
 def get_train_set_dic_track1(path):
     """
@@ -31,6 +33,7 @@ def get_train_set_dic_track1(path):
 def get_test_set_images(path):
     dir = os.listdir(path)
     return dir
+
 
 def write_result(result, path="prediction.json"):
     with open(path, "w") as f:

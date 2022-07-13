@@ -14,7 +14,6 @@ Ref:
 	https://arxiv.org/abs/1802.02375.
 """
 
-import math
 
 import torch
 import torch.nn as nn
@@ -287,9 +286,7 @@ class PyramidNet(nn.Module):
 
         self.input_featuremap_dim = self.inplanes
         self.conv1 = (
-            nn.Conv2d(
-                3, self.input_featuremap_dim, kernel_size=7, stride=2, padding=3, bias=False
-            )
+            nn.Conv2d(3, self.input_featuremap_dim, kernel_size=7, stride=2, padding=3, bias=False)
             if self.num_models <= 0
             else Ensemble_Conv2d(
                 3,
