@@ -54,6 +54,7 @@ class NoisyStudent:
         img_size=224,
         cutmix_in_cpu=False,
         if_finetune=False,
+        parallel=False
     ):
         self.result = {}
         train_image_path: str = train_image_path
@@ -87,6 +88,7 @@ class NoisyStudent:
         self.kd = kd
         lr if not if_finetune else min(lr, 1e-4)
         self.lr = lr
+        self.parallel=parallel
         self.cutmix_in_cpu = cutmix_in_cpu
         self.teacher_ckpt_path = teacher_ckpt_path
         self.student_ckpt_path = student_ckpt_path
@@ -162,7 +164,10 @@ class NoisyStudent:
         min_lr = min(self.lr * 0.001, 0.0001)
         if if_resmue:
             model_state_dict = torch.load("resume.pth")["model"]
-            self.model.load_state_dict(model_state_dict)
+            if self.parallel:
+                self.model.module.load_state_dict(model_state_dict)
+            else:
+                self.model.load_state_dict(model_state_dict)
             print("successfully load 224x224 model's ckpt file")
         for epoch in range(start_epoch, total_epoch + 1):
             if self.optimizer.param_groups[0]["lr"] < min_lr and epoch > self.warmup_epoch + 1:
@@ -245,8 +250,9 @@ class NoisyStudent:
             train_acc /= len(self.train_loader)
             if self.gpu == 0:
                 print(f"epoch {epoch}, test loader loss = {train_loss}, acc = {train_acc}")
+                now_model=self.model if not self.parallel else self.model.module
                 save_dict = {
-                    "model": self.model.state_dict(),
+                    "model": now_model.state_dict(),
                     "optimizer": self.optimizer.state_dict(),
                     "epoch": epoch,
                     "scaler": scaler.state_dict(),
@@ -327,6 +333,7 @@ def main_worker(
         img_size=img_size,
         cutmix_in_cpu=cutmix_in_cpu,
         if_finetune=if_finetune,
+        parallel=True
     )
     x.model = DDP(x.model, device_ids=[gpu], output_device=gpu)
     if kd:
@@ -434,6 +441,7 @@ if __name__ == "__main__":
                 img_size=args.img_size,
                 cutmix_in_cpu=args.cutmix_in_cpu,
                 if_finetune=args.if_finetune,
+                parallel=False
             )
             x.TTA()
             x.save_result()
@@ -451,6 +459,7 @@ if __name__ == "__main__":
                 img_size=args.img_size,
                 cutmix_in_cpu=args.cutmix_in_cpu,
                 if_finetune=args.if_finetune,
+                parallel=False
             )
             x.train(
                 total_epoch=total_epoch,

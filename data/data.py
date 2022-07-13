@@ -67,8 +67,8 @@ class DGDataSet(Dataset):
                     now_dic["category_id"] = self.label2id[category_name]
                     now_dic["context_category"] = context_category
                     self.images[len(self.images)] = now_dic
-                    if len(self.images) > 200:
-                        return
+                    # if len(self.images) > 200:
+                    #     return
 
     def synthesize_images_track2(self):
         self.images = {}
