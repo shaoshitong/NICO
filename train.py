@@ -33,6 +33,11 @@ class KDLoss(nn.KLDivLoss):
         hard_loss = super().forward(torch.log_softmax(student_output, 1), targets)
         return self.alpha * hard_loss + self.beta * (self.temperature ** 2) * soft_loss
 
+def reduce_mean(tensor,nprocs):
+    rt=tensor.clone()
+    dist.all_reduce(rt,op=dist.ReduceOp.SUM)
+    rt/=nprocs
+    return rt
 
 class NoisyStudent:
     def __init__(
@@ -203,7 +208,10 @@ class NoisyStudent:
                     if pre.shape != y.shape:
                         _, y = torch.max(y, dim=1)
                     train_acc += (torch.sum(pre == y).item()) / y.shape[0]
-                    train_loss += loss.item()
+                    if self.parallel:
+                        train_loss += reduce_mean(loss,torch.cuda.device_count()).item()
+                    else:
+                        train_loss += loss.item()
                     self.optimizer.zero_grad()
                     if fp16:
                         scaler.scale(loss).backward()
@@ -229,7 +237,10 @@ class NoisyStudent:
                         _, y = torch.max(y, dim=1)
 
                     train_acc += (torch.sum(pre == y).item()) / y.shape[0]
-                    train_loss += loss.item()
+                    if self.parallel:
+                        train_loss += reduce_mean(loss,torch.cuda.device_count()).item()
+                    else:
+                        train_loss += loss.item()
 
                     if myiter % accumulate_step == 0:
                         self.optimizer.zero_grad()
@@ -340,6 +351,7 @@ def main_worker(
         track_mode=track_mode,
         parallel=True,
     )
+    x.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(x.model)
     x.model = DDP(x.model, device_ids=[gpu], output_device=gpu)
     if kd:
         x.teacher = torch.nn.DataParallel(x.teacher, device_ids=[gpu], output_device=gpu)
