@@ -4,9 +4,8 @@
 ---
 
 ## The most important thing you should pay attention to is:
-<p> 
-<div style="color:#F00"> Make sure the last character of the root directory of all image folder's path is '\'</div> 
-</p>
+
+<p color="red"> Make sure the last character of the root directory of all image folder's path is '\'</p>
 
 ---
 
