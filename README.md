@@ -342,6 +342,6 @@ source activate nico-mcislab840 # in [Linux] , activate nico-mcislab840 # in [Wi
 ### 4. Run ensemble_track2_run.sh for ensemble, and then get the final json => final_prediction.json
 
 ```bash
-chmod 777 ensemble_track1_run.sh
+chmod 777 ensemble_track2_run.sh
 bash ensemble_track2_run.sh
 ```
