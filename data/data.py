@@ -89,7 +89,7 @@ class DGDataSet(Dataset):
             mixup_idx = random.randint(0, len(self.images) - 1)
             mixup_dic = self.images[mixup_idx]
             mixup_img = Image.open(mixup_dic["path"]).convert("RGB")
-            mixup_img = self.YOCO(mixup_img) if 0.5 > random.random() else self.transform(mixup_img)
+            mixup_img = self.YOCO(mixup_img) if 0.1 > random.random() else self.transform(mixup_img)
             mixup_label = torch.zeros(60)
             mixup_label[mixup_dic["category_id"]] = 1
             lam = np.random.beta(self.beta, self.beta)
