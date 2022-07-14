@@ -465,6 +465,7 @@ if __name__ == "__main__":
                 track_mode=args.track_mode,
                 parallel=False,
             )
+            x.model.load_state_dict(torch.load("student.pth")['model'])
             x.TTA()
             x.save_result()
         else:

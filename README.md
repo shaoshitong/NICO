@@ -212,7 +212,7 @@ bash track1_run.sh
 # 5. Output the test csv file
 
 ```bash
-python train.py --test --batchsize 64 --track_mode track1 \
+python train.py --test --batchsize 64  --img_size 384 --cutmix_in_cpu --track_mode track1 \
         --train_image_path /home/Bigdata/NICO/nico/train/ --label2id_path \
         /home/Bigdata/NICO/dg_label_id_mapping.json --test_image_path /home/Bigdata/NICO/nico/test/
 ```
@@ -370,7 +370,7 @@ bash track2_run.sh
 # 5. Output the test csv file
 
 ```bash
-python train.py --test --batchsize 64 --track_mode track2 \
+python train.py --test --batchsize 64 --img_size 384 --cutmix_in_cpu --track_mode track2 \
         --train_image_path /home/Bigdata/NICO2/nico/train/ --label2id_path \
         /home/Bigdata/NICO2/ood_label_id_mapping.json --test_image_path /home/Bigdata/NICO2/nico/test/
 ```
