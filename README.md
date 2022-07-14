@@ -4,29 +4,9 @@
 ---
 
 ## The most important thing you should pay attention to is:
-
+<p> 
 <div style="color:#F00"> Make sure the last character of the root directory of all image folder's path is '\'</div> 
-
----
-
-## How to run ?
-
-please download NICO dataset and recommend enviroment to meet the requirement (see requirment.txt)
-
-```bash
-conda env create -f environment.yaml
-python total_train.py --fp16 --parallel --cuda_devices '0,1,2,3,4,5,6,7' --train_image_path --track_mode <track1 or track2>\
-<you training dataset path> --label2id_path <you json path> --test_image_path <you test dataset path>
-```
----
-
-## How to test?
-
-```bash
-mv <you pretrain ckpt file> resume.pth
-python train.py --test --if_resume --train_image_path --track_mode <track1 or track2>\
-<you training dataset path> --label2id_path <you json path> --test_image_path <you test dataset path>
-``` 
+</p>
 
 ---
 
