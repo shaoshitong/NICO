@@ -7,6 +7,8 @@
 
 <font color="red"> Make sure the last character of the root directory of all image folder's path is '\'</font>
 
+<font color="red"> Make sure the student.pth file exists before outputting the json file </font>
+
 ---
 
 ## How to train track1 dataset immediately?
@@ -352,7 +354,7 @@ chmod 777 track2_run.sh
 bash track2_run.sh
 ```
 
-### 5. Output the test csv file
+### 5. Output the test json file
 
 ```bash
 python train.py --test --batch_size 48 --img_size 384 --cutmix_in_cpu --track_mode track2 \
