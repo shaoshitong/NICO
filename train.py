@@ -296,6 +296,8 @@ class NoisyStudent:
             self.model.eval()
             for x, names in tqdm(self.test_loader_student):
                 x = x.cuda(self.gpu)
+                if not self.cutmix_in_cpu:
+                    x,_=cutmix(x)
                 x = self.model(x)
                 for i, name in enumerate(list(names)):
                     self.result[name] += x[i, :].unsqueeze(0) * aug_weight
