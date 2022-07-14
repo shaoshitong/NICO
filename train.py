@@ -33,11 +33,13 @@ class KDLoss(nn.KLDivLoss):
         hard_loss = super().forward(torch.log_softmax(student_output, 1), targets)
         return self.alpha * hard_loss + self.beta * (self.temperature ** 2) * soft_loss
 
-def reduce_mean(tensor,nprocs):
-    rt=tensor.clone()
-    dist.all_reduce(rt,op=dist.ReduceOp.SUM)
-    rt/=nprocs
+
+def reduce_mean(tensor, nprocs):
+    rt = tensor.clone()
+    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
+    rt /= nprocs
     return rt
+
 
 class NoisyStudent:
     def __init__(
@@ -115,7 +117,7 @@ class NoisyStudent:
             )
             dict = torch.load(self.teacher_ckpt_path)
             self.teacher.load_state_dict(dict["model"])
-            self.model.load_state_dict(dict['model'])
+            self.model.load_state_dict(dict["model"])
             self.teacher.eval()
             self.teacher.requires_grad_(False)
             self.KDLoss = KDLoss()
@@ -209,7 +211,7 @@ class NoisyStudent:
                         _, y = torch.max(y, dim=1)
                     train_acc += (torch.sum(pre == y).item()) / y.shape[0]
                     if self.parallel:
-                        train_loss += reduce_mean(loss,torch.cuda.device_count()).item()
+                        train_loss += reduce_mean(loss, torch.cuda.device_count()).item()
                     else:
                         train_loss += loss.item()
                     self.optimizer.zero_grad()
@@ -238,7 +240,7 @@ class NoisyStudent:
 
                     train_acc += (torch.sum(pre == y).item()) / y.shape[0]
                     if self.parallel:
-                        train_loss += reduce_mean(loss,torch.cuda.device_count()).item()
+                        train_loss += reduce_mean(loss, torch.cuda.device_count()).item()
                     else:
                         train_loss += loss.item()
 
