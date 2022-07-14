@@ -3,6 +3,12 @@
 
 ---
 
+## The most important thing you should pay attention to is:
+
+<div style="color:#F00"> Make sure the last character of the root directory of all image folder's path is '\'</div> 
+
+---
+
 ## How to run ?
 
 please download NICO dataset and recommend enviroment to meet the requirement (see requirment.txt)
@@ -212,7 +218,7 @@ bash track1_run.sh
 ### 5. Output the test csv file
 
 ```bash
-python train.py --test --batchsize 64  --img_size 384 --cutmix_in_cpu --track_mode track1 \
+python train.py --test --batch_size 48  --img_size 384 --cutmix_in_cpu --track_mode track1 \
         --train_image_path /home/Bigdata/NICO/nico/train/ --label2id_path \
         /home/Bigdata/NICO/dg_label_id_mapping.json --test_image_path /home/Bigdata/NICO/nico/test/
 ```
@@ -370,7 +376,7 @@ bash track2_run.sh
 ### 5. Output the test csv file
 
 ```bash
-python train.py --test --batchsize 64 --img_size 384 --cutmix_in_cpu --track_mode track2 \
+python train.py --test --batch_size 48 --img_size 384 --cutmix_in_cpu --track_mode track2 \
         --train_image_path /home/Bigdata/NICO2/nico/train/ --label2id_path \
         /home/Bigdata/NICO2/ood_label_id_mapping.json --test_image_path /home/Bigdata/NICO2/nico/test/
 ```
