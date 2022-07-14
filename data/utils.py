@@ -30,6 +30,19 @@ def get_train_set_dic_track1(path):
     return dict
 
 
+def get_train_set_dic_track2(path):
+    """
+    :param path:  example './data/' last character must be '/'
+    :return:
+    """
+    dict = {}
+    list_file = os.listdir(path)
+    for item in list_file:
+        list_content = os.listdir(path + item)
+        dict[item] = list_content
+    return dict
+
+
 def get_test_set_images(path):
     dir = os.listdir(path)
     return dir

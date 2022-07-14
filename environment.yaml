@@ -1,0 +1,17 @@
+name: nico-mcislab840
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.9.0
+  - pip
+  - cudatoolkit=11.3.1
+  - pytorch=1.10.1
+  - torchvision=0.11.2
+  - torchaudio=0.10.1
+  - numpy
+  - pip:
+    - timm
+    - Pillow
+    - tqdm
+    - -e .

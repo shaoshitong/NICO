@@ -54,7 +54,7 @@ class NoisyStudent:
         img_size=224,
         cutmix_in_cpu=False,
         if_finetune=False,
-        parallel=False
+        parallel=False,
     ):
         self.result = {}
         train_image_path: str = train_image_path
@@ -74,6 +74,7 @@ class NoisyStudent:
             label2id_path=label2id_path,
             test_image_path=test_image_path,
             img_size=img_size,
+            track_mode=track_mode,
             cutmix_in_cpu=cutmix_in_cpu,
         )
         self.test_loader_student, self.label2id = get_test_loader(
@@ -81,6 +82,7 @@ class NoisyStudent:
             transforms="train",
             label2id_path=label2id_path,
             test_image_path=test_image_path,
+            track_mode=track_mode,
             cutmix_in_cpu=cutmix_in_cpu,
         )
         self.gpu = gpu
@@ -88,7 +90,7 @@ class NoisyStudent:
         self.kd = kd
         lr if not if_finetune else min(lr, 1e-4)
         self.lr = lr
-        self.parallel=parallel
+        self.parallel = parallel
         self.cutmix_in_cpu = cutmix_in_cpu
         self.teacher_ckpt_path = teacher_ckpt_path
         self.student_ckpt_path = student_ckpt_path
@@ -108,6 +110,7 @@ class NoisyStudent:
             )
             dict = torch.load(self.teacher_ckpt_path)
             self.teacher.load_state_dict(dict["model"])
+            self.model.load_state_dict(dict['model'])
             self.teacher.eval()
             self.teacher.requires_grad_(False)
             self.KDLoss = KDLoss()
@@ -159,9 +162,9 @@ class NoisyStudent:
         prev_loss = 999
         train_loss = 99
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
-        start_epoch = 0
+        start_epoch = 1
         myiter = 0
-        min_lr = min(self.lr * 0.001, 0.0001)
+        min_lr = min(self.lr * 0.001, 1e-6)
         if if_resmue:
             model_state_dict = torch.load("resume.pth")["model"]
             if self.parallel:
@@ -250,7 +253,7 @@ class NoisyStudent:
             train_acc /= len(self.train_loader)
             if self.gpu == 0:
                 print(f"epoch {epoch}, test loader loss = {train_loss}, acc = {train_acc}")
-                now_model=self.model if not self.parallel else self.model.module
+                now_model = self.model if not self.parallel else self.model.module
                 save_dict = {
                     "model": now_model.state_dict(),
                     "optimizer": self.optimizer.state_dict(),
@@ -308,6 +311,7 @@ def main_worker(
     if_finetune,
     accumulate_step,
     if_resume,
+    track_mode,
 ):
     print("Use GPU: {} for training".format(gpu))
     rank = 0  # 单机
@@ -333,7 +337,8 @@ def main_worker(
         img_size=img_size,
         cutmix_in_cpu=cutmix_in_cpu,
         if_finetune=if_finetune,
-        parallel=True
+        track_mode=track_mode,
+        parallel=True,
     )
     x.model = DDP(x.model, device_ids=[gpu], output_device=gpu)
     if kd:
@@ -375,6 +380,7 @@ if __name__ == "__main__":
     paser.add_argument("--accumulate_step", default=1, type=int)
     paser.add_argument("--if_finetune", default=False, action="store_true")
     paser.add_argument("--if_resume", default=False, action="store_true")
+    paser.add_argument("--track_mode", default="track1", type=str)
     paser.add_argument("--train_image_path", default="/home/Bigdata/NICO/nico/train/", type=str)
     paser.add_argument(
         "--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str
@@ -424,6 +430,7 @@ if __name__ == "__main__":
                 args.if_finetune,
                 args.accumulate_step,
                 args.if_resume,
+                args.track_mode,
             ),
         )
     else:
@@ -441,7 +448,8 @@ if __name__ == "__main__":
                 img_size=args.img_size,
                 cutmix_in_cpu=args.cutmix_in_cpu,
                 if_finetune=args.if_finetune,
-                parallel=False
+                track_mode=args.track_mode,
+                parallel=False,
             )
             x.TTA()
             x.save_result()
@@ -459,7 +467,8 @@ if __name__ == "__main__":
                 img_size=args.img_size,
                 cutmix_in_cpu=args.cutmix_in_cpu,
                 if_finetune=args.if_finetune,
-                parallel=False
+                track_mode=args.track_mode,
+                parallel=False,
             )
             x.train(
                 total_epoch=total_epoch,
