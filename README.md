@@ -185,23 +185,13 @@ make ensure that the files are placed as follows:
 conda env create -f environment.yaml
 source activate nico-mcislab840 # in [Linux] , activate nico-mcislab840 # in [Window]
 ```
-### 3. Modify train_image_path, label2id_path, and test_image_path in track1_run.sh
+### 3. Modify train_image_path, label2id_path, and test_image_path in track1_run.sh and ensemble_track1_run.sh
 
-### 4. Run track1_run.sh
-```bash
-chmod 777 track1_run.sh
-bash track1_run.sh
-```
-
----
-
-
-### 5. Output the test csv file
+### 4. Run ensemble_track1_run.sh for ensemble
 
 ```bash
-python train.py --test --batch_size 48  --img_size 384 --cutmix_in_cpu --track_mode track1 \
-        --train_image_path /home/Bigdata/NICO/nico/train/ --label2id_path \
-        /home/Bigdata/NICO/dg_label_id_mapping.json --test_image_path /home/Bigdata/NICO/nico/test/
+chmod 777 ensemble_track1_run.sh
+bash ensemble_track1_run.sh
 ```
 
 ## How to train track2 dataset immediately?
@@ -346,18 +336,12 @@ make ensure that the files are placed as follows:
 conda env create -f environment.yaml
 source activate nico-mcislab840 # in [Linux] , activate nico-mcislab840 # in [Window]
 ```
-### 3. Modify train_image_path, label2id_path, and test_image_path in track2_run.sh
+### 3. Modify train_image_path, label2id_path, and test_image_path in track2_run.sh and ensemble_track2_run.sh
 
-### 4. Run track2_run.sh
-```bash
-chmod 777 track2_run.sh
-bash track2_run.sh
-```
 
-### 5. Output the test json file
+### 4. Run ensemble_track2_run.sh for ensemble
 
 ```bash
-python train.py --test --batch_size 48 --img_size 384 --cutmix_in_cpu --track_mode track2 \
-        --train_image_path /home/Bigdata/NICO2/nico/train/ --label2id_path \
-        /home/Bigdata/NICO2/ood_label_id_mapping.json --test_image_path /home/Bigdata/NICO2/nico/test/
+chmod 777 ensemble_track1_run.sh
+bash ensemble_track2_run.sh
 ```
