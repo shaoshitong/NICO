@@ -5,7 +5,7 @@
 
 ## The most important thing you should pay attention to is:
 
-<p color="red"> Make sure the last character of the root directory of all image folder's path is '\'</p>
+<font color="red"> Make sure the last character of the root directory of all image folder's path is '\'</font>
 
 ---
 
