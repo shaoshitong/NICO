@@ -283,7 +283,7 @@ class NoisyStudent:
             self.optimizer.param_groups[0]["lr"] = self.lr * epoch / self.warmup_epoch
         elif now_loss is not None and prev_loss is not None:
             delta = prev_loss - now_loss
-            if delta / now_loss < 0.02 and delta < 0.02:
+            if delta > 0 and delta / now_loss < 0.02 and delta < 0.02:
                 self.optimizer.param_groups[0]["lr"] *= decay_rate
         p_lr = self.optimizer.param_groups[0]["lr"]
         print(f"lr = {p_lr}")

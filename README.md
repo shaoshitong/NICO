@@ -187,7 +187,7 @@ source activate nico-mcislab840 # in [Linux] , activate nico-mcislab840 # in [Wi
 ```
 ### 3. Modify train_image_path, label2id_path, and test_image_path in track1_run.sh and ensemble_track1_run.sh
 
-### 4. Run ensemble_track1_run.sh for ensemble
+### 4. Run ensemble_track1_run.sh for ensemble, and then get the final json => final_prediction.json
 
 ```bash
 chmod 777 ensemble_track1_run.sh
@@ -339,7 +339,7 @@ source activate nico-mcislab840 # in [Linux] , activate nico-mcislab840 # in [Wi
 ### 3. Modify train_image_path, label2id_path, and test_image_path in track2_run.sh and ensemble_track2_run.sh
 
 
-### 4. Run ensemble_track2_run.sh for ensemble
+### 4. Run ensemble_track2_run.sh for ensemble, and then get the final json => final_prediction.json
 
 ```bash
 chmod 777 ensemble_track1_run.sh
