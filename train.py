@@ -120,6 +120,7 @@ class NoisyStudent:
             self.model.load_state_dict(dict["model"])
             self.teacher.eval()
             self.teacher.requires_grad_(False)
+            print("use knowledge distillation...")
             self.KDLoss = KDLoss()
             self.ema = EMA([self.teacher], [self.model], momentum=0.99)
 
@@ -171,7 +172,7 @@ class NoisyStudent:
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         start_epoch = 1
         myiter = 0
-        min_lr = min(self.lr * 0.001, 1e-6)
+        min_lr = max(self.lr * 0.0001, 1e-6)
         if if_resmue:
             model_state_dict = torch.load("resume.pth")["model"]
             if self.parallel:

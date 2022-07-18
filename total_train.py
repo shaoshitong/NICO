@@ -14,7 +14,7 @@ if __name__ == "__main__":
     )
     paser.add_argument(
         "--cuda_devices",
-        default="0,1,2,3,4,5,6,7",
+        default="0,1",
         type=str,
         help="if using single multi-card mode, what is the GPU number used",
     )
@@ -70,15 +70,15 @@ if __name__ == "__main__":
     )
 
     stage3 = (
-        f"python train.py --batch_size {int(args.batchsize/2)} --total_epoch {args.epochs}  --lr 0.0001  {'--parallel' if args.parallel else ''} {'--fp16' if args.fp16 else ''} "
+        f"python train.py --batch_size {int(args.batchsize/2)} --total_epoch {args.epochs}  --lr 0.0001  {'--parallel' if args.parallel else ''} {'--fp16' if args.fp16 else ''} --if_resume "
         f"--img_size 384 --train_image_path {args.train_image_path} --label2id_path {args.label2id_path} --test_image_path {args.test_image_path} "
-        f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch -1 --track_mode {args.track_mode} --lr_decay_rate 0.95"
+        f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch -1 --track_mode {args.track_mode} --lr_decay_rate 0.9"
     )
 
     stage4 = (
         f"python train.py --batch_size {int(args.batchsize/2)} --total_epoch {args.epochs} --lr 0.0001  {'--parallel' if args.parallel else ''} {'--fp16' if args.fp16 else ''} --kd "
         f"--img_size 384 --train_image_path {args.train_image_path} --label2id_path {args.label2id_path} --test_image_path {args.test_image_path} "
-        f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch -1 --track_mode {args.track_mode} --lr_decay_rate 0.95"
+        f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch -1 --track_mode {args.track_mode} --lr_decay_rate 0.9"
     )
 
     os.system(stage1)
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     os.system(stage2)
 
-    os.system("mv student.pth resmue.pth")
+    os.system("mv student.pth resume.pth")
 
     torch.cuda.empty_cache()
 
