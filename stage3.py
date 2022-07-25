@@ -61,7 +61,7 @@ if __name__ == "__main__":
     stage3 = (
         f"python train.py --batch_size {int(args.batchsize/2)} --total_epoch {args.epochs}  --lr 0.01  {'--parallel' if args.parallel else ''} {'--fp16' if args.fp16 else ''} --if_resume "
         f"--img_size 384 --train_image_path {args.train_image_path} --label2id_path {args.label2id_path} --test_image_path {args.test_image_path} "
-        f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch -1 --track_mode {args.track_mode} --lr_decay_rate 0.9"
+        f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch 10 --track_mode {args.track_mode} --lr_decay_rate 0.9"
     )
 
     print("=============run staga3 ================")
