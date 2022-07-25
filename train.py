@@ -290,7 +290,7 @@ class NoisyStudent:
         print(f"lr = {p_lr}")
 
     @torch.no_grad()
-    def TTA(self, total_epoch=50, aug_weight=0.5):
+    def TTA(self, total_epoch=80, aug_weight=0.5):
         self.predict()
         print("now we are doing TTA")
         for epoch in range(1, total_epoch + 1):
