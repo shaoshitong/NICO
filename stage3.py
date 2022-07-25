@@ -81,19 +81,8 @@ if __name__ == "__main__":
         f"--if_finetune --accumulate_step 4 --cuda_devices {args.cuda_devices} --warmup_epoch -1 --track_mode {args.track_mode} --lr_decay_rate 0.9"
     )
 
-    print("=" * 60 + "compete stage1" + "=" * 60)
-
-
-    print("=" * 60 + "compete stage2" + "=" * 60)
-
+    print("=============run staga3 ================")
 
     torch.cuda.empty_cache()
 
-
     os.system(stage3)
-
-
-    print("=" * 60 + "compete stage3" + "=" * 60)
-
-
-    print("=" * 60 + "compete stage4" + "=" * 60)
