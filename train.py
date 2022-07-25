@@ -172,7 +172,7 @@ class NoisyStudent:
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         start_epoch = 1
         myiter = 0
-        min_lr = max(self.lr * 0.0001, 7e-5)
+        min_lr = max(self.lr * 0.0001, 5e-5)
         if if_resmue:
             model_state_dict = torch.load("resume.pth")["model"]
             if self.parallel:
