@@ -104,8 +104,8 @@ class NoisyStudent:
         self.original_ckpt_path = original_ckpt_path
         self.model = pyramidnet272(num_classes=60, num_models=2 if ensemble else -1).cuda(self.gpu)
         if if_finetune:
-            self.optimizer = torch.optim.AdamW(
-                self.model.parameters(), lr=lr, weight_decay=weight_decay
+            self.optimizer = torch.optim.SGD(
+                self.model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9
             )
         else:
             self.optimizer = torch.optim.SGD(
@@ -297,8 +297,6 @@ class NoisyStudent:
             self.model.eval()
             for x, names in tqdm(self.test_loader_student):
                 x = x.cuda(self.gpu)
-                if not self.cutmix_in_cpu:
-                    x,_=cutmix(x)
                 x = self.model(x)
                 for i, name in enumerate(list(names)):
                     self.result[name] += x[i, :].unsqueeze(0) * aug_weight
@@ -468,7 +466,7 @@ if __name__ == "__main__":
                 track_mode=args.track_mode,
                 parallel=False,
             )
-            x.model.load_state_dict(torch.load("student.pth")['model'])
+            x.model.load_state_dict(torch.load("resume.pth")['model'])
             x.TTA()
             x.save_result()
         else:
