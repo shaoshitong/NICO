@@ -268,5 +268,5 @@ def get_test_loader(
         cutmix_in_cpu=cutmix_in_cpu,
         img_size=img_size,
     )
-    loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+    loader = DataLoader(test_set, batch_size=batch_size, shuffle=False,pin_memory=True,num_workers=4)
     return loader, test_set.get_id2label()
