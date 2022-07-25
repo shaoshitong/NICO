@@ -47,6 +47,16 @@ class DGDataSet(Dataset):
             ]
         )
 
+        self.new_transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop((img_size, img_size), scale=(0.75, 1.0)),
+                transforms.RandomHorizontalFlip(0.5),
+                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
+
         self.test_transform = transforms.Compose(
             [
                 transforms.Resize((img_size, img_size)),
@@ -124,7 +134,7 @@ class DGDataSet(Dataset):
             if self.transform_type == "test" or self.transform_type is None:
                 img = self.test_transform(img)
             else:
-                img = self.transform(img)
+                img = self.new_transform(img)
             return img, self.images[item]
 
         if self.mode == "train" or self.mode == "valid":
