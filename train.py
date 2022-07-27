@@ -163,6 +163,7 @@ class NoisyStudent:
         decay_rate=0.9,
         fp16=True,
         if_resmue=False,
+        resume=False,
     ):
         from torch.cuda.amp import GradScaler, autocast
 
@@ -180,6 +181,17 @@ class NoisyStudent:
             else:
                 self.model.load_state_dict(model_state_dict)
             print("successfully load 224x224 model's ckpt file")
+        if resume:
+            dict = torch.load("original.pth")
+            if self.parallel:
+                self.model.module.load_state_dict(dict['model'])
+            else:
+                self.model.load_state_dict(dict['model'])
+            self.optimizer.load_state_dict(dict['optimizer`'])
+            start_epoch = dict['epoch']
+            scaler.load_state_dict(dict['scaler'])
+            print("successfully load last checkpoint!")
+
         for epoch in range(start_epoch, total_epoch + 1):
             if self.optimizer.param_groups[0]["lr"] < min_lr and epoch > self.warmup_epoch + 1:
                 break
@@ -325,6 +337,7 @@ def main_worker(
     if_finetune,
     accumulate_step,
     if_resume,
+    resume,
     track_mode,
 ):
     print("Use GPU: {} for training".format(gpu))
@@ -372,6 +385,7 @@ def main_worker(
         fp16=fp16,
         accumulate_step=accumulate_step,
         if_resmue=if_resume,
+        resume=resume,
     )
 
 
@@ -391,10 +405,12 @@ if __name__ == "__main__":
     paser.add_argument("--cuda_devices", default="0,1,2,3", type=str)
     paser.add_argument("--cutmix_in_cpu", default=False, action="store_true")
     paser.add_argument("--fp16", default=False, action="store_true")
+    paser.add_argument("--test_pth_path",default='original.pth',type=str)
     paser.add_argument("--lr_decay_rate", default=0.9, type=float)
     paser.add_argument("--accumulate_step", default=1, type=int)
     paser.add_argument("--if_finetune", default=False, action="store_true")
     paser.add_argument("--if_resume", default=False, action="store_true")
+    paser.add_argument("--resume", default=False, action="store_true")
     paser.add_argument("--track_mode", default="track1", type=str)
     paser.add_argument("--train_image_path", default="/home/Bigdata/NICO/nico/train/", type=str)
     paser.add_argument(
@@ -445,7 +461,8 @@ if __name__ == "__main__":
                 args.if_finetune,
                 args.accumulate_step,
                 args.if_resume,
-                args.track_mode,
+                args.resume,
+            args.track_mode,
             ),
         )
     else:
@@ -466,7 +483,9 @@ if __name__ == "__main__":
                 track_mode=args.track_mode,
                 parallel=False,
             )
-            x.model.load_state_dict(torch.load("original.pth")['model'])
+            if not os.path.exists(args.test_pth_path):
+                raise FileNotFoundError("test pth path can not be found")
+            x.model.load_state_dict(args.test_pth_path,['model'])
             x.TTA()
             x.save_result()
         else:
@@ -492,4 +511,5 @@ if __name__ == "__main__":
                 fp16=args.fp16,
                 accumulate_step=args.accumulate_step,
                 if_resmue=args.if_resume,
+                resume=args.resume
             )
