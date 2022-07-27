@@ -14,6 +14,8 @@ mv student.pth resume.pth
 
 chmod 777 track1_run.sh
 
+bash track1_run.sh
+
 mv original.pth original_1.pth
 
 bash track1_run.sh
