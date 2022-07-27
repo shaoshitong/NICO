@@ -19,7 +19,7 @@ class KDLoss(nn.KLDivLoss):
     "Distilling the Knowledge in a Neural Network"
     """
 
-    def __init__(self, temperature=5, alpha=1, beta=0.2, reduction="batchmean", **kwargs):
+    def __init__(self, temperature=4, alpha=1, beta=1, reduction="batchmean", **kwargs):
         super().__init__(reduction=reduction)
         self.temperature = temperature
         self.alpha = alpha
@@ -54,7 +54,7 @@ class NoisyStudent:
         warmup_epoch=10,
         track_mode="track1",
         kd=False,
-        teacher_ckpt_path="./teacher.pth",
+        teacher_ckpt_path="./resume.pth",
         student_ckpt_path="./student.pth",
         original_ckpt_path="./original.pth",
         ensemble=False,
@@ -117,12 +117,11 @@ class NoisyStudent:
             )
             dict = torch.load(self.teacher_ckpt_path)
             self.teacher.load_state_dict(dict["model"])
-            self.model.load_state_dict(dict["model"])
             self.teacher.eval()
             self.teacher.requires_grad_(False)
-            print("use knowledge distillation...")
+            print(f"use knowledge distillation..., teacher ckpt:{self.teacher_ckpt_path}")
+            # self.ema = EMA([self.teacher], [self.model], momentum=0.999)
             self.KDLoss = KDLoss()
-            self.ema = EMA([self.teacher], [self.model], momentum=0.99)
 
     def save_result(self, epoch=None):
         result = {}
@@ -173,7 +172,7 @@ class NoisyStudent:
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         start_epoch = 1
         myiter = 0
-        min_lr = max(self.lr * 0.0001, 5e-5)
+        min_lr = max(self.lr * 0.0001, 1e-7)
         if if_resmue:
             model_state_dict = torch.load("resume.pth")["model"]
             if self.parallel:
@@ -237,7 +236,6 @@ class NoisyStudent:
                     else:
                         loss.backward()
                         self.optimizer.step()
-                    self.ema.step()
                 else:
                     if fp16:
                         with autocast():
