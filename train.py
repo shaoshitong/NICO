@@ -172,7 +172,7 @@ class NoisyStudent:
         criterion = nn.CrossEntropyLoss().cuda(self.gpu)
         start_epoch = 1
         myiter = 0
-        min_lr = max(self.lr * 0.0001, 1e-7)
+        min_lr = max(self.lr * 0.0001, 5e-5)
         if if_resmue:
             model_state_dict = torch.load("resume.pth")["model"]
             if self.parallel:
@@ -181,7 +181,7 @@ class NoisyStudent:
                 self.model.load_state_dict(model_state_dict)
             print("successfully load 224x224 model's ckpt file")
         if resume:
-            dict = torch.load("original.pth")
+            dict = torch.load("student.pth")
             if self.parallel:
                 self.model.module.load_state_dict(dict['model'])
             else:

@@ -2,12 +2,11 @@
 
 # Train
 
-cp -r original.pth original_tmp.pth
+cp -r student.pth student_tmp.pth
 
-cp -r resume.pth resume_tmp.pth
-python train.py --batch_size 64 --total_epoch 10000  --lr 0.1  --parallel --fp16 --kd --img_size 224 \
+python train.py --batch_size 64 --total_epoch 10000  --lr 0.1  --parallel --fp16 --kd --img_size 224 --resume \
         --train_image_path /home/Bigdata/NICO2/nico/train/ --label2id_path /home/Bigdata/NICO2/dg_label_id_mapping.json \
-        --test_image_path /home/Bigdata/NICO2/nico/test/ --lr_decay_rate 0.95 \
+        --test_image_path /home/Bigdata/NICO2/nico/test/ --lr_decay_rate 0.9 \
         --cuda_devices 0,1 --warmup_epoch 10 --track_mode track1
 
 mv student.pth resume.pth
