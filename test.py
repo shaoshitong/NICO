@@ -1,4 +1,4 @@
-import os
+import os, copy
 
 import numpy as np
 import torch
@@ -14,7 +14,6 @@ from models import pyramidnet272
 from utils import EMA, SWA
 
 
-
 def reduce_mean(tensor, nprocs):
     rt = tensor.clone()
     dist.all_reduce(rt, op=dist.ReduceOp.SUM)
@@ -24,15 +23,15 @@ def reduce_mean(tensor, nprocs):
 
 class NoisyStudent:
     def __init__(
-        self,
-        gpu,
-        total_tta=80,
-        label2id_path: str = "/home/Bigdata/NICO/dg_label_id_mapping.json",
-        test_image_path: str = "/home/Bigdata/NICO/nico/test/",
-        batch_size: int = 64,
-        track_mode="track1",
-        img_size=224,
-        parallel=False,
+            self,
+            gpu,
+            total_tta=80,
+            label2id_path: str = "/rooot/autodl/dg_label_id_mapping.json",
+            test_image_path: str = "/home/Bigdata/NICO/nico/test/",
+            batch_size: int = 64,
+            track_mode="track1",
+            img_size=224,
+            parallel=False,
     ):
         self.result = {}
         label2id_path: str = label2id_path
@@ -53,7 +52,7 @@ class NoisyStudent:
             track_mode=track_mode,
         )
         self.gpu = gpu
-        self.total_tta=total_tta
+        self.total_tta = total_tta
         self.parallel = parallel
         self.model = pyramidnet272(num_classes=60, num_models=-1).cuda(self.gpu)
 
@@ -62,12 +61,10 @@ class NoisyStudent:
         for name, pre in list(self.result.items()):
             _, y = torch.max(pre, dim=1)
             result[name] = y.item()
-
-        if epoch is not None:
-            write_result(result, path="prediction" + str(epoch) + ".json")
+        if self.parallel:
+            write_result(result, path="prediction_gpu_" + str(self.gpu) + ".json")
         else:
             write_result(result)
-
         return result
 
     def predict(self):
@@ -75,7 +72,7 @@ class NoisyStudent:
             print("teacher are giving his predictions!")
             self.model.eval()
             for x, names in tqdm(self.test_loader_predict):
-                x = x.cuda()
+                x = x.cuda(self.gpu)
                 x = self.model(x)
                 for i, name in enumerate(list(names)):
                     self.result[name] = x[i, :].unsqueeze(0)  # 1, D
@@ -102,21 +99,20 @@ class NoisyStudent:
                     self.result[name] += x[i, :].unsqueeze(0) * aug_weight
             print(f"Epoch {epoch} finished")
         print("TTA finished")
-        self.save_result()
 
 
 def main_worker(
-    gpu,
-    ngpus_per_node,
-    batch_size,
-    total_tta,
-    dist_url,
-    world_size,
-    label2id_path,
-    test_image_path,
-    test_pth_path,
-    img_size,
-    track_mode,
+        gpu,
+        ngpus_per_node,
+        batch_size,
+        total_tta,
+        dist_url,
+        world_size,
+        label2id_path,
+        test_pth_path,
+        test_image_path,
+        img_size,
+        track_mode,
 ):
     print("Use GPU: {} for training".format(gpu))
     rank = 0  # 单机
@@ -124,8 +120,7 @@ def main_worker(
     rank = rank * ngpus_per_node + gpu
     print("world_size:", world_size)
     dist.init_process_group(
-        backend=dist_backend, init_method=dist_url, world_size=world_size, rank=rank
-    )
+        backend=dist_backend, init_method=dist_url, world_size=world_size, rank=rank)
     torch.cuda.set_device(gpu)
     batch_size = int(batch_size / ngpus_per_node)
     print("sub batch size is", batch_size)
@@ -161,17 +156,20 @@ def main_worker(
         num_workers=6 if batch_size % 6 == 0 else 4,
         pin_memory=True,
     )
+    x.TTA()
+    x.save_result()
 
 
 if __name__ == "__main__":
     import argparse
+
     paser = argparse.ArgumentParser()
     paser.add_argument("--batch_size", default=128, type=int)
-    paser.add_argument("--total_tta", default=80, type=int)
+    paser.add_argument("--total_tta", default=0, type=int)
     paser.add_argument("--parallel", default=False, action="store_true")
     paser.add_argument("--img_size", default=224, type=int)
-    paser.add_argument("--cuda_devices", default="0,1,2,3", type=str)
-    paser.add_argument("--test_pth_path",default='original_tmp.pth',type=str)
+    paser.add_argument("--cuda_devices", default="0,1", type=str)
+    paser.add_argument("--test_pth_path", default='original_tmp.pth', type=str)
     paser.add_argument("--track_mode", default="track1", type=str)
     paser.add_argument(
         "--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str
@@ -211,6 +209,17 @@ if __name__ == "__main__":
                 args.track_mode,
             ),
         )
+        import json
+
+        last_result = {}
+        for gpu in args.cuda_devices.split(','):
+            with open(f"prediction_gpu_{gpu}.json", "r") as f:
+                result = json.load(f)
+                last_result.update(result)
+        with open("prediction.json", "w") as f:
+            json.dump(last_result, f)
+        for gpu in args.cuda_devices.split(','):
+            os.system(f'rm prediction_gpu_{gpu}.json')
     else:
         x = NoisyStudent(
             gpu=0,
@@ -224,7 +233,7 @@ if __name__ == "__main__":
         )
         if not os.path.exists(args.test_pth_path):
             raise FileNotFoundError("test pth path can not be found")
-        dict=torch.load(args.test_pth_path)
+        dict = torch.load(args.test_pth_path)
         x.model.load_state_dict(dict['model'])
         x.TTA()
         x.save_result()
