@@ -47,6 +47,7 @@ class NoisyStudent:
         self.test_loader_student, self.label2id = get_test_loader(
             batch_size=batch_size,
             transforms="train",
+            img_size=img_size,
             label2id_path=label2id_path,
             test_image_path=test_image_path,
             track_mode=track_mode,
@@ -162,14 +163,14 @@ def main_worker(
 
 if __name__ == "__main__":
     import argparse
-
+    # 86.46
     paser = argparse.ArgumentParser()
     paser.add_argument("--batch_size", default=128, type=int)
-    paser.add_argument("--total_tta", default=0, type=int)
+    paser.add_argument("--total_tta", default=80, type=int)
     paser.add_argument("--parallel", default=False, action="store_true")
-    paser.add_argument("--img_size", default=224, type=int)
+    paser.add_argument("--img_size", default=384, type=int)
     paser.add_argument("--cuda_devices", default="0,1", type=str)
-    paser.add_argument("--test_pth_path", default='original_tmp.pth', type=str)
+    paser.add_argument("--test_pth_path", default='original_1.pth', type=str)
     paser.add_argument("--track_mode", default="track1", type=str)
     paser.add_argument(
         "--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str
