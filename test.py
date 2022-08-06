@@ -57,15 +57,16 @@ class NoisyStudent:
         self.parallel = parallel
         self.model = pyramidnet272(num_classes=60, num_models=-1).cuda(self.gpu)
 
-    def save_result(self, epoch=None):
+    def save_result(self, path="prediction.json"):
         result = {}
         for name, pre in list(self.result.items()):
             _, y = torch.max(pre, dim=1)
             result[name] = y.item()
         if self.parallel:
-            write_result(result, path="prediction_gpu_" + str(self.gpu) + ".json")
+            path1,path2=path.split(".")
+            write_result(result, path=f"{path1}_gpu_" + str(self.gpu) + ".json")
         else:
-            write_result(result)
+            write_result(result, path=path)
         return result
 
     def predict(self):
@@ -114,6 +115,7 @@ def main_worker(
         test_image_path,
         img_size,
         track_mode,
+        json_save_path,
 ):
     print("Use GPU: {} for training".format(gpu))
     rank = 0  # 单机
@@ -158,20 +160,30 @@ def main_worker(
         pin_memory=True,
     )
     x.TTA()
-    x.save_result()
+    x.save_result(path=json_save_path)
+
+
+def sum(aps, bps):
+    keys = aps.keys()
+    result = copy.deepcopy(aps)
+    for key in keys:
+        result[key] = (aps[key] + bps[key]) / 2
+    return result
 
 
 if __name__ == "__main__":
     import argparse
+
     # 86.46
     paser = argparse.ArgumentParser()
     paser.add_argument("--batch_size", default=128, type=int)
-    paser.add_argument("--total_tta", default=80, type=int)
-    paser.add_argument("--parallel", default=False, action="store_true")
+    paser.add_argument("--total_tta", default=100, type=int)
+    paser.add_argument("--parallel", default=True, action="store_true")
     paser.add_argument("--img_size", default=384, type=int)
     paser.add_argument("--cuda_devices", default="0,1", type=str)
     paser.add_argument("--test_pth_path", default='original_1.pth', type=str)
     paser.add_argument("--track_mode", default="track1", type=str)
+    paser.add_argument("--json_save_path",default='prediction.json',type=str)
     paser.add_argument(
         "--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str
     )
@@ -182,6 +194,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     total_tta = args.total_tta
     parallel = args.parallel
+    json_save_path = args.json_save_path
     if parallel:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
         os.environ["MASTER_ADDR"] = "127.0.0.1"  #
@@ -208,19 +221,20 @@ if __name__ == "__main__":
                 args.test_image_path,
                 args.img_size,
                 args.track_mode,
+                json_save_path,
             ),
         )
         import json
-
         last_result = {}
+        path1,path2=json_save_path.split(".")
         for gpu in args.cuda_devices.split(','):
-            with open(f"prediction_gpu_{gpu}.json", "r") as f:
+            with open(f"{path1}_gpu_{gpu}.json", "r") as f:
                 result = json.load(f)
                 last_result.update(result)
-        with open("prediction.json", "w") as f:
+        with open(json_save_path, "w") as f:
             json.dump(last_result, f)
         for gpu in args.cuda_devices.split(','):
-            os.system(f'rm prediction_gpu_{gpu}.json')
+            os.system(f'rm {path1}_gpu_{gpu}.json')
     else:
         x = NoisyStudent(
             gpu=0,
@@ -235,7 +249,9 @@ if __name__ == "__main__":
         if not os.path.exists(args.test_pth_path):
             raise FileNotFoundError("test pth path can not be found")
         dict = torch.load(args.test_pth_path)
-        x.model.load_state_dict(dict['model'])
+        dict1 = torch.load("original_1.pth")['model']
+        dict2 = torch.load("original_2.pth")['model']
+        dict3 = sum(dict1, dict2)
+        x.model.load_state_dict(dict3)
         x.TTA()
-        x.save_result()
-
+        x.save_result(path=json_save_path)
