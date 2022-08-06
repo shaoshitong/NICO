@@ -177,9 +177,9 @@ if __name__ == "__main__":
     # 86.46
     paser = argparse.ArgumentParser()
     paser.add_argument("--batch_size", default=128, type=int)
-    paser.add_argument("--total_tta", default=0, type=int)
-    paser.add_argument("--parallel", default=False, action="store_true")
-    paser.add_argument("--img_size", default=32, type=int)
+    paser.add_argument("--total_tta", default=100, type=int)
+    paser.add_argument("--parallel", default=True, action="store_true")
+    paser.add_argument("--img_size", default=384, type=int)
     paser.add_argument("--cuda_devices", default="0,1", type=str)
     paser.add_argument("--test_pth_path", default='original_1.pth', type=str)
     paser.add_argument("--track_mode", default="track2", type=str)
