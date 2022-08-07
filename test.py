@@ -180,7 +180,7 @@ if __name__ == "__main__":
     paser.add_argument("--total_tta", default=100, type=int)
     paser.add_argument("--parallel", default=True, action="store_true")
     paser.add_argument("--img_size", default=384, type=int)
-    paser.add_argument("--cuda_devices", default="0,1", type=str)
+    paser.add_argument("--cuda_devices", default="2,3", type=str)
     paser.add_argument("--test_pth_path", default='original_1.pth', type=str)
     paser.add_argument("--track_mode", default="track2", type=str)
     paser.add_argument("--json_save_path",default='prediction_2.json',type=str)
@@ -249,9 +249,6 @@ if __name__ == "__main__":
         if not os.path.exists(args.test_pth_path):
             raise FileNotFoundError("test pth path can not be found")
         dict = torch.load(args.test_pth_path)
-        dict1 = torch.load("original_1.pth")['model']
-        dict2 = torch.load("original_2.pth")['model']
-        dict3 = sum(dict1, dict2)
-        x.model.load_state_dict(dict3)
+        x.model.load_state_dict(dict)
         x.TTA()
         x.save_result(path=json_save_path)
