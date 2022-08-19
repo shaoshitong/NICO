@@ -120,7 +120,7 @@ class NoisyStudent:
             self.teacher.eval()
             self.teacher.requires_grad_(False)
             print(f"use knowledge distillation..., teacher ckpt:{self.teacher_ckpt_path}")
-            # self.ema = EMA([self.teacher], [self.model], momentum=0.999)
+            self.ema = EMA([self.teacher], [self.model], momentum=0.999)
             self.KDLoss = KDLoss()
 
     def save_result(self, epoch=None):
@@ -233,9 +233,13 @@ class NoisyStudent:
                         nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
                         scaler.step(self.optimizer)
                         scaler.update()
+                        if epoch%50==0:
+                            self.ema.step()
                     else:
                         loss.backward()
                         self.optimizer.step()
+                        if epoch%50==0:
+                            self.ema.step()
                 else:
                     if fp16:
                         with autocast():
@@ -410,11 +414,11 @@ if __name__ == "__main__":
     paser.add_argument("--if_resume", default=False, action="store_true")
     paser.add_argument("--resume", default=False, action="store_true")
     paser.add_argument("--track_mode", default="track1", type=str)
-    paser.add_argument("--train_image_path", default="/home/Bigdata/NICO/nico/train/", type=str)
+    paser.add_argument("--train_image_path", default="./nico/train/", type=str)
     paser.add_argument(
-        "--label2id_path", default="/home/Bigdata/NICO/dg_label_id_mapping.json", type=str
+        "--label2id_path", default="./nico/dg_label_id_mapping.json", type=str
     )
-    paser.add_argument("--test_image_path", default="/home/Bigdata/NICO/nico/test/", type=str)
+    paser.add_argument("--test_image_path", default="./nico/test/", type=str)
     args = paser.parse_args()
 
     print(args)

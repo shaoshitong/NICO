@@ -1,10 +1,10 @@
 #!/bin/bash
 
-label="kk"
-test_pth_path=( "original_1.pth" "original_2.pth"  "original_3.pth" )
+label="nico1"
+test_pth_path=( "track_1_pth_1.pth" "track_1_pth_2.pth"  "track_1_pth_3.pth" )
 track_mode="track1"
-label2id_path="/home/Bigdata/NICO/dg_label_id_mapping.json"
-test_image_path="/home/Bigdata/NICO/nico/test/"
+label2id_path="./nico/dg_label_id_mapping.json"
+test_image_path="./nico/test/"
 
 save_json_path="prediction$label"
 mkdir $save_json_path
